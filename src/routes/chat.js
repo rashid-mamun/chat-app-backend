@@ -1,21 +1,49 @@
 const express = require('express');
 const router = express.Router();
-const authMiddleware = require('../middleware/auth');
-const upload = require('../utils/fileUpload');
+const { authMiddleware } = require('../middleware/auth');
+const { rateLimiters } = require('../middleware/rateLimiter');
+const { pinMessageValidation, messageValidation } = require('../middleware/validation');
+const { upload } = require('../services/fileService');
 const {
-    sendPrivateMessage,
-    sendGroupMessage,
-    uploadFile,
-    createGroup,
-    getUserChats,
+    getPrivateMessagesController,
+    getGroupMessagesController,
+    getUserChatsController,
+    searchMessagesController,
+    searchMessagesAdvancedController,
+    pinMessage,
+    deleteMessage,
+    editMessage,
+    uploadFile
 } = require('../controllers/chatController');
 
-router.use(authMiddleware);
+// Message retrieval routes
+router.get('/private/:recipientId', authMiddleware, getPrivateMessagesController);
+router.get('/group/:groupId', authMiddleware, getGroupMessagesController);
+router.get('/user', authMiddleware, getUserChatsController);
 
-router.post('/private', sendPrivateMessage);
-router.post('/group', sendGroupMessage);
-router.post('/file', upload.single('file'), uploadFile);
-router.post('/group/create', createGroup);
-router.get('/chats', getUserChats);
+// Search routes
+router.get('/messages/search', authMiddleware, searchMessagesController);
+router.get('/messages/search/advanced', authMiddleware, searchMessagesAdvancedController);
+
+// Message management routes
+router.post('/messages/:messageId/pin', authMiddleware, pinMessageValidation, pinMessage);
+router.delete('/messages/:messageId', authMiddleware, deleteMessage);
+router.put('/messages/:messageId', authMiddleware, messageValidation, editMessage);
+
+// File upload route
+router.post('/upload', authMiddleware, (req, res, next) => {
+    upload(req, res, (err) => {
+        if (err) {
+            if (err.message === 'Invalid file type') {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Invalid file type'
+                });
+            }
+            return next(err);
+        }
+        next();
+    });
+}, uploadFile);
 
 module.exports = router;

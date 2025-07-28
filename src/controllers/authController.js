@@ -1,36 +1,145 @@
-const User = require('../models/User');
-const jwt = require('jsonwebtoken');
+const { authenticator } = require('otplib');
+const qrcode = require('qrcode');
+const authService = require('../services/authService');
+const { AppError } = require('../middleware/errorHandler');
+const logger = require('../utils/logger');
 
-const register = async (req, res) => {
-    const { username, email, password } = req.body;
+const register = async (req, res, next) => {
     try {
-        const existingUser = await User.findOne({ $or: [{ email }, { username }] });
-        if (existingUser) return res.status(400).json({ message: 'User already exists' });
+        const { username, email, password } = req.body;
+        const result = await authService.register({ username, email, password });
 
-        const user = new User({ username, email, password });
-        await user.save();
-
-        const token = jwt.sign({ id: user._id, username }, process.env.JWT_SECRET, { expiresIn: '1h' });
-        res.status(201).json({ token, user: { id: user._id, username, email } });
+        logger.info(`User registered successfully: ${email}`);
+        res.status(201).json({
+            success: true,
+            message: 'User registered successfully',
+            data: result
+        });
     } catch (error) {
-        res.status(500).json({ message: 'Server error' });
+        next(error);
     }
 };
 
-const login = async (req, res) => {
-    const { email, password } = req.body;
+const login = async (req, res, next) => {
     try {
-        const user = await User.findOne({ email });
-        if (!user) return res.status(400).json({ message: 'Invalid credentials' });
+        const { email, password, twoFactorToken } = req.body;
+        const result = await authService.login({ email, password, twoFactorToken });
 
-        const isMatch = await user.comparePassword(password);
-        if (!isMatch) return res.status(400).json({ message: 'Invalid credentials' });
-
-        const token = jwt.sign({ id: user._id, username: user.username }, process.env.JWT_SECRET, { expiresIn: '1h' });
-        res.json({ token, user: { id: user._id, username: user.username, email } });
+        logger.info(`User logged in: ${email}`);
+        res.json({
+            success: true,
+            message: 'Login successful',
+            data: result
+        });
     } catch (error) {
-        res.status(500).json({ message: 'Server error' });
+        next(error);
     }
 };
 
-module.exports = { register, login };
+const logout = async (req, res, next) => {
+    try {
+        await authService.logout(req.user._id);
+
+        res.json({
+            success: true,
+            message: 'Logout successful'
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
+const refreshToken = async (req, res, next) => {
+    try {
+        const { refreshToken } = req.body;
+        const result = await authService.refreshToken(refreshToken);
+
+        res.json({
+            success: true,
+            data: result
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
+const setup2FA = async (req, res, next) => {
+    try {
+        const result = await authService.setup2FA(req.user._id);
+        const qrCode = await qrcode.toDataURL(result.otpauth);
+
+        res.json({
+            success: true,
+            data: { qrCode, secret: result.secret }
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
+const verify2FA = async (req, res, next) => {
+    try {
+        const { token } = req.body;
+        const result = await authService.verify2FA(req.user._id, token);
+
+        res.json({
+            success: true,
+            message: result.message
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
+const getProfile = async (req, res, next) => {
+    try {
+        const user = await authService.getProfile(req.user._id);
+        res.json({
+            success: true,
+            data: user
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
+const updateProfile = async (req, res, next) => {
+    try {
+        const { username, avatar } = req.body;
+        const result = await authService.updateProfile(req.user._id, { username, avatar });
+
+        res.json({
+            success: true,
+            message: 'Profile updated successfully',
+            data: result
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
+const changePassword = async (req, res, next) => {
+    try {
+        const { currentPassword, newPassword } = req.body;
+        await authService.changePassword(req.user._id, currentPassword, newPassword);
+
+        res.json({
+            success: true,
+            message: 'Password changed successfully'
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
+module.exports = {
+    register,
+    login,
+    logout,
+    refreshToken,
+    setup2FA,
+    verify2FA,
+    getProfile,
+    updateProfile,
+    changePassword
+};
