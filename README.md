@@ -1,139 +1,504 @@
-# Real-Time Chat Application Backend
+# Chat App Backend
 
-A robust, scalable backend for a real-time chat application supporting private messaging, group chats, file sharing, and emoji support. Built with Node.js, Express, Socket.IO, MongoDB, Redis, BullMQ, and Docker, this project is designed for developers seeking a modern, containerized chat solution.
+A robust, real-time chat application backend built with Node.js, Express.js, and Socket.IO. This backend provides comprehensive chat functionality including private messaging, group chats, file sharing, message search, and two-factor authentication.
 
+## Description
+
+This is a full-featured chat application backend that supports real-time messaging, group management, file uploads, message search, and enhanced security features. The application is built with scalability and security in mind, featuring JWT authentication, rate limiting, input validation, and comprehensive error handling.
 
 ## Features
-- **User Authentication**: Secure registration and login with JWT-based authentication.
-- **Private Messaging**: Real-time one-on-one chats with text and emoji support.
-- **Group Chats**: Create and manage group conversations with multiple users.
-- **File Sharing**: Upload and share files (images, PDFs, etc.) with asynchronous processing via BullMQ.
-- **Real-Time Communication**: Powered by Socket.IO with Redis adapter for scalability across multiple instances.
-- **Containerized Deployment**: Fully Dockerized with MongoDB and Redis for consistent environments.
-- **Emoji Support**: Seamless handling of Unicode emojis in messages.
 
-## Tech Stack
-- **Node.js & Express**: RESTful API framework.
-- **Socket.IO**: Real-time messaging with Redis adapter for scalability.
-- **MongoDB**: NoSQL database for storing users, messages, and groups.
-- **Redis**: Used for Socket.IO scaling and BullMQ job queues.
-- **BullMQ**: Asynchronous task processing for file uploads.
-- **Multer**: File upload handling with local storage.
-- **JWT**: Secure user authentication.
-- **Docker**: Containerization for app, MongoDB, and Redis.
+### 🔐 Authentication & Security
+- **JWT-based authentication** with refresh tokens
+- **Two-Factor Authentication (TOTP)** with QR code generation
+- **Password validation** with strong requirements
+- **Rate limiting** to prevent abuse
+- **Input validation** and sanitization
+- **XSS protection** and security headers
 
-## Prerequisites
-- **Node.js**: Version 18 or higher.
-- **Docker**: Docker Desktop or CLI for containerized setup.
-- **Postman**: For testing API endpoints (optional for WebSocket testing).
-- **MongoDB & Redis**: Local instances or via Docker.
-- **Git**: For cloning the repository.
+### 💬 Messaging
+- **Private messaging** between users
+- **Group messaging** with member management
+- **Real-time messaging** via Socket.IO
+- **Message reactions** (like, love, laugh, sad, angry)
+- **Message editing** and deletion
+- **Message pinning** in groups
+- **Read receipts** and delivery status
+- **Message compression** for large content
 
-## Project Setup
-1. **Clone the Repository**:
+### 📁 File Management
+- **File uploads** with type validation
+- **Multiple file types** support (images, videos, documents, etc.)
+- **File size limits** and validation
+- **Secure file storage** with proper naming
+
+### 🔍 Search & Discovery
+- **Basic message search** by content
+- **Advanced search** with filters (date range, file type, sender)
+- **User search** and discovery
+- **Group search** and management
+
+### 👥 Group Management
+- **Create and manage groups**
+- **Add/remove members**
+- **Admin management** with permissions
+- **Group settings** and customization
+
+### 📊 Monitoring & Health
+- **Health check endpoints** for monitoring
+- **Comprehensive logging** with Winston
+- **Error tracking** and reporting
+- **Performance monitoring**
+
+## Technologies Used
+
+### Backend Framework
+- **Node.js** - JavaScript runtime
+- **Express.js** - Web application framework
+- **Socket.IO** - Real-time bidirectional communication
+
+### Database & Caching
+- **MongoDB** - NoSQL database with Mongoose ODM
+- **Redis** - In-memory data store for caching and sessions
+
+### Authentication & Security
+- **JWT (jsonwebtoken)** - Token-based authentication
+- **bcryptjs** - Password hashing
+- **otplib** - Two-factor authentication (TOTP)
+- **qrcode** - QR code generation for 2FA
+
+### File Handling
+- **Multer** - File upload middleware
+- **Compression** - Data compression utilities
+
+### Security Middleware
+- **Helmet** - Security headers
+- **CORS** - Cross-origin resource sharing
+- **express-rate-limit** - Rate limiting
+- **express-mongo-sanitize** - MongoDB injection protection
+- **xss-clean** - XSS protection
+- **hpp** - HTTP parameter pollution protection
+
+### Validation & Utilities
+- **express-validator** - Input validation
+- **validator** - Data validation library
+- **Winston** - Logging framework
+
+### Testing
+- **Jest** - Testing framework
+- **Supertest** - HTTP assertion testing
+- **mongodb-memory-server** - In-memory MongoDB for testing
+- **socket.io-client** - Socket.IO client for testing
+
+### Development & Deployment
+- **Docker** - Containerization
+- **Docker Compose** - Multi-container orchestration
+- **Nodemon** - Development server with auto-restart
+
+## Installation
+
+### Prerequisites
+- Node.js (>= 16.0.0)
+- MongoDB
+- Redis
+- npm or yarn
+
+### Step-by-Step Setup
+
+1. **Clone the repository**
    ```bash
-   git clone https://github.com/rashid-mamun/chat-app-backend.git
+   git clone <repository-url>
    cd chat-app-backend
    ```
 
-2. **Install Dependencies**:
+2. **Install dependencies**
    ```bash
    npm install
    ```
 
-3. **Configure Environment Variables**:
-   Create a `.env` file in the project root:
-   ```env
-   PORT=5000
-   MONGO_URI=mongodb://mongo:27017/chat-app
-   JWT_SECRET=your_jwt_secret_key
-   REDIS_URL=redis://redis:6379
-   ```
-   Replace `your_jwt_secret_key` with a secure key (e.g., generated via `openssl rand -base64 32`).
-
-4. **Create Uploads Directory**:
+3. **Create environment file**
    ```bash
-   mkdir uploads
+   cp .env.example .env
    ```
 
-## Running the Application
-### Option 1: Locally (Without Docker)
-1. **Start MongoDB and Redis**:
-   - MongoDB: Run `mongod` (default port: 27017).
-   - Redis: Run `redis-server` (default port: 6379).
-2. **Update `.env`**:
-   - If not using Docker, set `MONGO_URI=mongodb://localhost:27017/chat-app` and `REDIS_URL=redis://localhost:6379`.
-3. **Start the Server**:
-   ```bash
-   npm start
-   ```
-   - The app runs on `http://localhost:5000`.
+4. **Configure environment variables** (see Environment Variables section)
 
-### Option 2: With Docker
-1. **Build and Run Containers**:
+5. **Start MongoDB and Redis**
    ```bash
-   docker-compose up --build
+   # Using Docker (recommended)
+   docker-compose up -d mongo redis
+   
+   # Or start them manually
+   mongod
+   redis-server
    ```
-2. **Access Services**:
-   - API: `http://localhost:5000`
-   - MongoDB: `localhost:27017`
-   - Redis: `localhost:6379`
-3. **Stop Containers**:
+
+6. **Run database migrations** (if any)
    ```bash
-   docker-compose down
+   npm run migrate
    ```
+
+## Environment Variables
+
+Create a `.env` file in the root directory with the following variables:
+
+```env
+# Server Configuration
+NODE_ENV=development
+PORT=5000
+
+# Database Configuration
+MONGO_URI=mongodb://localhost:27017/chat-app
+MONGO_URI_TEST=mongodb://localhost:27017/chat-app-test
+
+# Redis Configuration
+REDIS_URL=redis://localhost:6379
+REDIS_URL_TEST=redis://localhost:6379
+
+# JWT Configuration
+JWT_SECRET=your_super_secret_jwt_key_here
+JWT_EXPIRES_IN=15m
+JWT_REFRESH_EXPIRES_IN=7d
+
+# File Upload Configuration
+UPLOAD_PATH=./uploads
+MAX_FILE_SIZE=10485760
+ALLOWED_FILE_TYPES=jpeg,jpg,png,gif,pdf,doc,docx,txt,plain
+
+# Rate Limiting
+RATE_LIMIT_WINDOW_MS=900000
+RATE_LIMIT_MAX_REQUESTS=100
+
+# Logging
+LOG_LEVEL=info
+LOG_FILE=logs/app.log
+
+# 2FA Configuration
+TOTP_ISSUER=ChatApp
+TOTP_LABEL=ChatApp_2FA
+```
+
+## Running the Project
+
+### Development Mode
+```bash
+npm run dev
+```
+
+### Production Mode
+```bash
+npm start
+```
+
+### Using Docker
+```bash
+# Build and run all services
+docker-compose up --build
+
+# Run in background
+docker-compose up -d
+
+# Stop services
+docker-compose down
+```
+
+### Health Check
+Once the server is running, you can check if everything is working:
+```bash
+curl http://localhost:5000/api/v1/health
+```
 
 ## API Endpoints
-All endpoints except `/api/auth/*` require a `Bearer <token>` in the `Authorization` header.
 
-| Method | Endpoint                     | Description                          | Body Example                                                                 |
-|--------|------------------------------|--------------------------------------|------------------------------------------------------------------------------|
-| POST   | `/api/auth/register`         | Register a new user                  | `{"username": "testuser", "email": "test@example.com", "password": "password123"}` |
-| POST   | `/api/auth/login`            | Login and get JWT token              | `{"email": "test@example.com", "password": "password123"}`                    |
-| POST   | `/api/chat/private`          | Send a private message               | `{"recipientId": "<user_id>", "content": "Hello 😊"}`                         |
-| POST   | `/api/chat/group`            | Send a group message                 | `{"groupId": "<group_id>", "content": "Group message 😊"}`                    |
-| POST   | `/api/chat/file`             | Upload a file                        | Form-data: `file` (file), `chatType` ("private" or "group"), `recipientId` or `groupId` |
-| POST   | `/api/chat/group/create`     | Create a group                       | `{"name": "Test Group", "memberIds": ["<user_id>"]}`                         |
-| GET    | `/api/chat/chats`            | Get user's private and group chats   | None                                                                         |
+### Authentication Endpoints
 
-## WebSocket Events
-Connect to `ws://localhost:5000` with the JWT token in `auth.token`.
+#### Register User
+```http
+POST /api/v1/auth/register
+Content-Type: application/json
 
-| Event            | Description                          | Payload Example                                              |
-|-------------------|--------------------------------------|-------------------------------------------------------------|
-| `joinPrivate`     | Join a private chat room            | `recipientId: "<user_id>"`                                  |
-| `joinGroup`       | Join a group chat room              | `groupId: "<group_id>"`                                     |
-| `privateMessage`  | Send a private message              | `{"recipientId": "<user_id>", "content": "Hello 😊"}`        |
-| `groupMessage`    | Send a group message                | `{"groupId": "<group_id>", "content": "Group message 😊"}`   |
-| `fileMessage`     | Notify file upload                  | `{"recipientId": "<user_id>", "groupId": "<group_id>", "fileUrl": "/uploads/file.jpg", "fileType": "image/jpeg"}` |
-| `privateMessage`  | Receive private message (response)   | Message object                                              |
-| `groupMessage`    | Receive group message (response)     | Message object                                              |
+{
+  "username": "john_doe",
+  "email": "john@example.com",
+  "password": "SecurePass123!"
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "message": "User registered successfully",
+  "data": {
+    "user": {
+      "id": "user_id",
+      "username": "john_doe",
+      "email": "john@example.com"
+    },
+    "tokens": {
+      "accessToken": "jwt_token",
+      "refreshToken": "refresh_token"
+    }
+  }
+}
+```
+
+#### Login User
+```http
+POST /api/v1/auth/login
+Content-Type: application/json
+
+{
+  "email": "john@example.com",
+  "password": "SecurePass123!"
+}
+```
+
+#### Setup 2FA
+```http
+POST /api/v1/auth/2fa/setup
+Authorization: Bearer <access_token>
+```
+
+#### Verify 2FA
+```http
+POST /api/v1/auth/2fa/verify
+Authorization: Bearer <access_token>
+Content-Type: application/json
+
+{
+  "token": "123456"
+}
+```
+
+#### Get Profile
+```http
+GET /api/v1/auth/profile
+Authorization: Bearer <access_token>
+```
+
+#### Update Profile
+```http
+PUT /api/v1/auth/profile
+Authorization: Bearer <access_token>
+Content-Type: application/json
+
+{
+  "username": "new_username",
+  "avatar": "avatar_url"
+}
+```
+
+#### Change Password
+```http
+PUT /api/v1/auth/change-password
+Authorization: Bearer <access_token>
+Content-Type: application/json
+
+{
+  "currentPassword": "old_password",
+  "newPassword": "new_secure_password"
+}
+```
+
+### Chat Endpoints
+
+#### Get Private Messages
+```http
+GET /api/v1/chat/private/:recipientId?page=1&limit=20
+Authorization: Bearer <access_token>
+```
+
+#### Get Group Messages
+```http
+GET /api/v1/chat/group/:groupId?page=1&limit=20
+Authorization: Bearer <access_token>
+```
+
+#### Get User Chats
+```http
+GET /api/v1/chat/user
+Authorization: Bearer <access_token>
+```
+
+#### Search Messages
+```http
+GET /api/v1/chat/messages/search?query=hello&chatType=private&chatId=recipient_id
+Authorization: Bearer <access_token>
+```
+
+#### Advanced Message Search
+```http
+GET /api/v1/chat/messages/search/advanced?query=hello&chatType=private&chatId=recipient_id&startDate=2024-01-01&endDate=2024-12-31&fileType=image
+Authorization: Bearer <access_token>
+```
+
+#### Pin Message
+```http
+POST /api/v1/chat/messages/:messageId/pin
+Authorization: Bearer <access_token>
+```
+
+#### Edit Message
+```http
+PUT /api/v1/chat/messages/:messageId
+Authorization: Bearer <access_token>
+Content-Type: application/json
+
+{
+  "content": "Updated message content"
+}
+```
+
+#### Delete Message
+```http
+DELETE /api/v1/chat/messages/:messageId
+Authorization: Bearer <access_token>
+```
+
+#### Upload File
+```http
+POST /api/v1/chat/upload
+Authorization: Bearer <access_token>
+Content-Type: multipart/form-data
+
+file: <file>
+```
+
+### Group Endpoints
+
+#### Create Group
+```http
+POST /api/v1/group
+Authorization: Bearer <access_token>
+Content-Type: application/json
+
+{
+  "name": "My Group",
+  "members": ["user_id_1", "user_id_2"]
+}
+```
+
+#### Get Groups
+```http
+GET /api/v1/group
+Authorization: Bearer <access_token>
+```
+
+#### Get Group Details
+```http
+GET /api/v1/group/:groupId
+Authorization: Bearer <access_token>
+```
+
+#### Update Group
+```http
+PUT /api/v1/group/:groupId
+Authorization: Bearer <access_token>
+Content-Type: application/json
+
+{
+  "name": "Updated Group Name"
+}
+```
+
+#### Delete Group
+```http
+DELETE /api/v1/group/:groupId
+Authorization: Bearer <access_token>
+```
+
+#### Add Member
+```http
+POST /api/v1/group/:groupId/members
+Authorization: Bearer <access_token>
+Content-Type: application/json
+
+{
+  "memberId": "user_id"
+}
+```
+
+#### Remove Member
+```http
+DELETE /api/v1/group/:groupId/members/:memberId
+Authorization: Bearer <access_token>
+```
+
+#### Add Admin
+```http
+POST /api/v1/group/:groupId/admins
+Authorization: Bearer <access_token>
+Content-Type: application/json
+
+{
+  "adminId": "user_id"
+}
+```
+
+#### Remove Admin
+```http
+DELETE /api/v1/group/:groupId/admins/:adminId
+Authorization: Bearer <access_token>
+```
+
+### Health Endpoint
+
+#### Health Check
+```http
+GET /api/v1/health
+```
+
+**Response:**
+```json
+{
+  "timestamp": "2024-01-01T00:00:00.000Z",
+  "status": "healthy",
+  "version": "1.0.0",
+  "uptime": 3600,
+  "services": {
+    "mongodb": {
+      "status": "connected"
+    },
+    "redis": {
+      "status": "connected"
+    }
+  }
+}
+```
 
 ## Testing
-### Using Postman
-1. **Import the Postman Collection**:
-   - Save `ChatAppBackend.postman_collection.json` from the project root.
-   - Import it into Postman.
-2. **Set Up Environment**:
-   - Create a Postman environment with variables:
-     - `baseUrl`: `http://localhost:5000`
-     - `token`: Set after login
-     - `userId`: Set after login
-     - `recipientId`: Set after registering a second user
-     - `groupId`: Set after creating a group
-3. **Run Requests**:
-   - Register two users (set `recipientId` for the second user).
-   - Login to obtain `token` and `userId`.
-   - Test private messages, group creation, group messages, file uploads, and chat retrieval.
-   - For file uploads, select a file (e.g., `test.jpg`) in the form-data body.
 
-### Using WebSocket Client
-1. **Connect to Socket.IO**:
-   - Use Postman’s WebSocket feature or a library like `socket.io-client`.
-   - Endpoint: `ws://localhost:5000`
-   - Pass JWT token in `auth.token`.
-2. **Test Events**:
-   - Emit `joinPrivate` and `privateMessage` for private chats.
-   - Emit `joinGroup` and `groupMessage` for group chats.
-   - Listen for `privateMessage` and `groupMessage` events to verify real-time messaging.
+### Run All Tests
+```bash
+npm test
+```
+
+### Run Tests with Coverage
+```bash
+npm run test:coverage
+```
+
+### Run Tests in Watch Mode
+```bash
+npm run test:watch
+```
+
+### Test Structure
+- **Unit Tests**: Individual function testing
+- **Integration Tests**: API endpoint testing
+- **Socket Tests**: Real-time communication testing
+- **Database Tests**: Using in-memory MongoDB
+
+### Test Coverage
+The project maintains high test coverage across:
+- Authentication flows
+- Chat functionality
+- Group management
+- File uploads
+- Message search
+- Socket.IO handlers
+- Error handling
+
+
 
