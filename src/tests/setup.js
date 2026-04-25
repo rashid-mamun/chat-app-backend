@@ -1,7 +1,9 @@
 // Set test environment
 process.env.NODE_ENV = 'test';
 
-require('dotenv').config({ path: './.env' });
+// Load test environment variables (.env.test takes priority over .env)
+require('dotenv').config({ path: './.env.test' });
+require('dotenv').config({ path: './.env' });  // fallback for any missing vars
 const mongoose = require('mongoose');
 const { MongoMemoryServer } = require('mongodb-memory-server');
 const { redisClient } = require('../config/redis');
@@ -10,6 +12,7 @@ let mongoServer;
 
 beforeAll(async () => {
     // Start in-memory MongoDB server
+    // NOTE: First run may take 1-2 minutes to download MongoDB binary
     mongoServer = await MongoMemoryServer.create();
     const mongoUri = mongoServer.getUri();
 
@@ -19,11 +22,11 @@ beforeAll(async () => {
         useUnifiedTopology: true,
     });
 
-    // Connect to Redis
+    // Connect to Redis (guard against race conditions)
     if (!redisClient.isOpen) {
         await redisClient.connect();
     }
-}, 30000);
+}, 120000);  // 2 minute timeout for first-time MongoDB binary download
 
 beforeEach(async () => {
     // Clear all collections
@@ -33,7 +36,9 @@ beforeEach(async () => {
     }
 
     // Clear Redis
-    await redisClient.flushAll();
+    if (redisClient.isOpen) {
+        await redisClient.flushAll();
+    }
 });
 
 afterAll(async () => {
@@ -49,4 +54,4 @@ afterAll(async () => {
     if (redisClient.isOpen) {
         await redisClient.quit();
     }
-}, 30000);
+}, 120000);  // 2 minute timeout for teardown

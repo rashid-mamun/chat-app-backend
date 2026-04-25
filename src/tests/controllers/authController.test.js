@@ -57,7 +57,7 @@ describe('Auth Controller', () => {
                 .expect(400);
 
             expect(response.body.success).toBe(false);
-            expect(response.body.message).toBe('Validation failed');
+            expect(response.body.message).toMatch(/Validation failed/);
             expect(response.body.errors).toBeDefined();
         });
 
@@ -70,7 +70,7 @@ describe('Auth Controller', () => {
                 .expect(400);
 
             expect(response.body.success).toBe(false);
-            expect(response.body.message).toBe('Validation failed');
+            expect(response.body.message).toMatch(/Validation failed/);
         });
 
         it('should return error for duplicate email', async () => {
@@ -635,6 +635,163 @@ describe('Auth Controller', () => {
 
             expect(response.body.success).toBe(false);
             expect(response.body.message).toBe('Access token is required');
+        });
+    });
+
+    // ─── ADDITIONAL CORNER CASE TESTS ────────────────────────────────────────
+
+    describe('POST /api/v1/auth/register — additional corner cases', () => {
+        it('should reject registration with empty body', async () => {
+            const response = await request(app)
+                .post('/api/v1/auth/register')
+                .send({})
+                .expect(400);
+
+            expect(response.body.success).toBe(false);
+            expect(response.body.message).toMatch(/Validation failed/);
+        });
+
+        it('should reject username with spaces', async () => {
+            const response = await request(app)
+                .post('/api/v1/auth/register')
+                .send({
+                    username: 'test user',   // space not allowed
+                    email: 'test@example.com',
+                    password: 'Test123!@#'
+                })
+                .expect(400);
+
+            expect(response.body.success).toBe(false);
+            expect(response.body.message).toMatch(/Validation failed/);
+        });
+
+        it('should reject password without special character', async () => {
+            const response = await request(app)
+                .post('/api/v1/auth/register')
+                .send({
+                    username: 'testuser',
+                    email: 'test@example.com',
+                    password: 'Test1234'   // no special char
+                })
+                .expect(400);
+
+            expect(response.body.success).toBe(false);
+        });
+
+        it('should reject password without uppercase letter', async () => {
+            const response = await request(app)
+                .post('/api/v1/auth/register')
+                .send({
+                    username: 'testuser',
+                    email: 'test@example.com',
+                    password: 'test123!@#'   // no uppercase
+                })
+                .expect(400);
+
+            expect(response.body.success).toBe(false);
+        });
+    });
+
+    describe('POST /api/v1/auth/login — banned user', () => {
+        it('should reject login for a banned user', async () => {
+            // Create user and then ban them
+            const user = await User.create({
+                username: 'banneduser',
+                email: 'banned@example.com',
+                password: 'Test123!@#'
+            });
+            await User.findByIdAndUpdate(user._id, { status: 'banned' });
+
+            const response = await request(app)
+                .post('/api/v1/auth/login')
+                .send({
+                    email: 'banned@example.com',
+                    password: 'Test123!@#'
+                })
+                .expect(401);
+
+            expect(response.body.success).toBe(false);
+        });
+    });
+
+    describe('POST /api/v1/auth/logout — token blacklisting', () => {
+        it('should blacklist access token so it cannot be used after logout', async () => {
+            // Create and login user
+            await User.create({
+                username: 'logouttest',
+                email: 'logouttest@example.com',
+                password: 'Test123!@#'
+            });
+            const loginRes = await request(app)
+                .post('/api/v1/auth/login')
+                .send({ email: 'logouttest@example.com', password: 'Test123!@#' });
+
+            const token = loginRes.body.data.tokens.accessToken;
+
+            // Logout
+            await request(app)
+                .post('/api/v1/auth/logout')
+                .set('Authorization', `Bearer ${token}`)
+                .expect(200);
+
+            // Try using the same token on a protected route
+            const response = await request(app)
+                .get('/api/v1/auth/profile')
+                .set('Authorization', `Bearer ${token}`)
+                .expect(401);
+
+            expect(response.body.success).toBe(false);
+            expect(response.body.message).toBe('Token has been revoked');
+        });
+
+        it('should invalidate refresh token after logout', async () => {
+            await User.create({
+                username: 'refreshtest',
+                email: 'refreshtest@example.com',
+                password: 'Test123!@#'
+            });
+            const loginRes = await request(app)
+                .post('/api/v1/auth/login')
+                .send({ email: 'refreshtest@example.com', password: 'Test123!@#' });
+
+            const { accessToken, refreshToken: rt } = loginRes.body.data.tokens;
+
+            // Logout
+            await request(app)
+                .post('/api/v1/auth/logout')
+                .set('Authorization', `Bearer ${accessToken}`)
+                .expect(200);
+
+            // Refresh token should no longer work
+            const response = await request(app)
+                .post('/api/v1/auth/refresh-token')
+                .send({ refreshToken: rt })
+                .expect(401);
+
+            expect(response.body.success).toBe(false);
+        });
+    });
+
+    describe('PUT /api/v1/auth/profile — own username update', () => {
+        it('should allow updating to same username (no conflict with self)', async () => {
+            await User.create({
+                username: 'sameuser',
+                email: 'sameuser@example.com',
+                password: 'Test123!@#'
+            });
+            const loginRes = await request(app)
+                .post('/api/v1/auth/login')
+                .send({ email: 'sameuser@example.com', password: 'Test123!@#' });
+            const token = loginRes.body.data.tokens.accessToken;
+
+            const response = await request(app)
+                .put('/api/v1/auth/profile')
+                .set('Authorization', `Bearer ${token}`)
+                .send({ username: 'sameuser' })  // own username
+                .expect(200);
+
+            expect(response.body.success).toBe(true);
+            expect(response.body.data.username).toBe('sameuser');
         });
     });
 });

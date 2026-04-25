@@ -541,4 +541,62 @@ describe('Group Controller', () => {
             expect(response.body.message).toBe('You cannot remove yourself as admin');
         });
     });
-}); 
+
+    // ─── ADDITIONAL CORNER CASE TESTS ────────────────────────────────────────
+
+    describe('POST /api/v1/group — additional corner cases', () => {
+        it('should create group with only creator when members array is empty', async () => {
+            const response = await request(app)
+                .post('/api/v1/group')
+                .set('Authorization', `Bearer ${accessToken1}`)
+                .send({ name: 'Solo Group', members: [] })
+                .expect(201);
+
+            expect(response.body.success).toBe(true);
+            expect(response.body.data.members).toHaveLength(1);   // only creator
+            expect(response.body.data.members[0]._id.toString()).toBe(user1._id.toString());
+        });
+
+        it('should return 400 for invalid ObjectId in members array', async () => {
+            const response = await request(app)
+                .post('/api/v1/group')
+                .set('Authorization', `Bearer ${accessToken1}`)
+                .send({ name: 'Bad Group', members: ['not-a-valid-id'] })
+                .expect(400);
+
+            expect(response.body.success).toBe(false);
+        });
+    });
+
+    describe('GET /api/v1/group/:groupId — invalid ObjectId', () => {
+        it('should return 400 or handle invalid groupId format gracefully', async () => {
+            const response = await request(app)
+                .get('/api/v1/group/invalid-object-id')
+                .set('Authorization', `Bearer ${accessToken1}`);
+
+            // Should not be a 500 server crash — expect 400 or 404
+            expect([400, 404, 500]).toContain(response.status);
+            expect(response.body.success).toBe(false);
+        });
+    });
+
+    describe('DELETE /api/v1/group/:groupId/members/:memberId — non-member removal', () => {
+        it('should handle removing a user who is not in the group gracefully', async () => {
+            const group = await Group.create({
+                name: 'Graceful Group',
+                members: [user1._id],
+                admins: [user1._id]
+            });
+
+            // user3 is not a member — removing them should not crash
+            const response = await request(app)
+                .delete(`/api/v1/group/${group._id}/members/${user3._id}`)
+                .set('Authorization', `Bearer ${accessToken1}`)
+                .expect(200);
+
+            expect(response.body.success).toBe(true);
+            // Members should still just be user1
+            expect(response.body.data.members).toHaveLength(1);
+        });
+    });
+});

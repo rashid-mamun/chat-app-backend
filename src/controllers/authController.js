@@ -38,7 +38,8 @@ const login = async (req, res, next) => {
 
 const logout = async (req, res, next) => {
     try {
-        await authService.logout(req.user._id);
+        const token = req.header('Authorization').split(' ')[1];
+        await authService.logout(req.user._id, token);
 
         res.json({
             success: true,
@@ -105,8 +106,8 @@ const getProfile = async (req, res, next) => {
 
 const updateProfile = async (req, res, next) => {
     try {
-        const { username, avatar } = req.body;
-        const result = await authService.updateProfile(req.user._id, { username, avatar });
+        const { username, avatar, bio } = req.body;
+        const result = await authService.updateProfile(req.user._id, { username, avatar, bio });
 
         res.json({
             success: true,

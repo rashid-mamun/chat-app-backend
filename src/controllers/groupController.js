@@ -24,7 +24,7 @@ const createGroup = async (req, res, next) => {
         });
         await group.save();
 
-        await group.populate('members', 'username email avatar');
+        await group.populate('members', 'username email avatar isOnline status lastSeen');
 
         res.status(201).json({
             success: true,
@@ -39,8 +39,8 @@ const createGroup = async (req, res, next) => {
 const getGroups = async (req, res, next) => {
     try {
         const groups = await Group.find({ members: req.user._id })
-            .populate('members', 'username email avatar')
-            .populate('admins', 'username email avatar');
+            .populate('members', 'username email avatar isOnline status lastSeen')
+            .populate('admins', 'username email avatar isOnline status lastSeen');
 
         res.json({
             success: true,
@@ -55,8 +55,8 @@ const getGroup = async (req, res, next) => {
     try {
         const { groupId } = req.params;
         const group = await Group.findById(groupId)
-            .populate('members', 'username email avatar')
-            .populate('admins', 'username email avatar');
+            .populate('members', 'username email avatar isOnline status lastSeen')
+            .populate('admins', 'username email avatar isOnline status lastSeen');
 
         if (!group) {
             throw new AppError('Group not found', 404);
@@ -94,8 +94,8 @@ const updateGroup = async (req, res, next) => {
         }
 
         await group.save();
-        await group.populate('members', 'username email avatar');
-        await group.populate('admins', 'username email avatar');
+        await group.populate('members', 'username email avatar isOnline status lastSeen');
+        await group.populate('admins', 'username email avatar isOnline status lastSeen');
 
         res.json({
             success: true,
@@ -156,7 +156,7 @@ const addMember = async (req, res, next) => {
 
         group.members.push(memberId);
         await group.save();
-        await group.populate('members', 'username email avatar');
+        await group.populate('members', 'username email avatar isOnline status lastSeen');
 
         res.json({
             success: true,
@@ -189,7 +189,7 @@ const removeMember = async (req, res, next) => {
         group.admins = group.admins.filter(admin => admin.toString() !== memberId);
 
         await group.save();
-        await group.populate('members', 'username email avatar');
+        await group.populate('members', 'username email avatar isOnline status lastSeen');
 
         res.json({
             success: true,
@@ -225,7 +225,7 @@ const addAdmin = async (req, res, next) => {
 
         group.admins.push(adminId);
         await group.save();
-        await group.populate('admins', 'username email avatar');
+        await group.populate('admins', 'username email avatar isOnline status lastSeen');
 
         res.json({
             success: true,
@@ -256,7 +256,7 @@ const removeAdmin = async (req, res, next) => {
 
         group.admins = group.admins.filter(admin => admin.toString() !== adminId);
         await group.save();
-        await group.populate('admins', 'username email avatar');
+        await group.populate('admins', 'username email avatar isOnline status lastSeen');
 
         res.json({
             success: true,

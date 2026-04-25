@@ -125,10 +125,25 @@ describe('Auth Service', () => {
             };
 
             const { user, tokens } = await register(userData);
-            await logout(user.id);
+            await logout(user.id, tokens.accessToken);
 
-            const storedToken = await redisClient.get(`refresh_token:${user.id}`);
-            expect(storedToken).toBeNull();
+            const storedRefresh = await redisClient.get(`refresh_token:${user.id}`);
+            expect(storedRefresh).toBeNull();
+        });
+
+        it('should blacklist the access token in Redis on logout', async () => {
+            const userData = {
+                username: 'testuser2',
+                email: 'testuser2@example.com',
+                password: 'Password123!'
+            };
+
+            const { user, tokens } = await register(userData);
+            await logout(user.id, tokens.accessToken);
+
+            // The token should be stored under blacklist: key
+            const blacklisted = await redisClient.get(`blacklist:${tokens.accessToken}`);
+            expect(blacklisted).toBe('1');
         });
     });
 

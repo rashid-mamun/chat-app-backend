@@ -95,7 +95,7 @@ const pinMessage = async (req, res, next) => {
 
         if (message.chatType === 'group') {
             const group = await Group.findById(message.group);
-            if (!group.members.includes(req.user._id) || !group.admins.includes(req.user._id)) {
+            if (!group || !group.admins.some(admin => admin.toString() === req.user._id.toString())) {
                 throw new AppError('Only group admins can pin messages', 403);
             }
         } else if (message.chatType === 'private' &&

@@ -12,6 +12,23 @@
             "item": [
                 {
                     "name": "Register User",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "if (pm.response.code === 201) {",
+                                    "    const json = pm.response.json();",
+                                    "    pm.collectionVariables.set('access_token', json.data.tokens.accessToken);",
+                                    "    pm.collectionVariables.set('refresh_token', json.data.tokens.refreshToken);",
+                                    "    pm.collectionVariables.set('user_id', json.data.user.id);",
+                                    "    console.log('Tokens saved automatically.');",
+                                    "}"
+                                ]
+                            }
+                        }
+                    ],
                     "request": {
                         "method": "POST",
                         "header": [
@@ -22,51 +39,53 @@
                         ],
                         "body": {
                             "mode": "raw",
-                            "raw": "{\n  \"username\": \"john_doe\",\n  \"email\": \"john@example.com\",\n  \"password\": \"SecurePass123!\"\n}"
+                            "raw": "{\n  \"username\": \"john_doe\",\n  \"email\": \"john@example.com\",\n  \"password\": \"SecurePass123!\"\n}",
+                            "options": { "raw": { "language": "json" } }
                         },
                         "url": {
                             "raw": "{{base_url}}/api/v1/auth/register",
-                            "host": [
-                                "{{base_url}}"
-                            ],
-                            "path": [
-                                "api",
-                                "v1",
-                                "auth",
-                                "register"
-                            ]
+                            "host": ["{{base_url}}"],
+                            "path": ["api", "v1", "auth", "register"]
                         },
-                        "description": "Register a new user account"
+                        "description": "Register a new user. **Automatically saves** `access_token`, `refresh_token`, and `user_id` to collection variables.\n\n**Rate limit:** 5 requests / 15 minutes\n\n**Password rules:** min 8 chars, at least one uppercase, one number, one special character."
                     },
                     "response": []
                 },
                 {
                     "name": "Login User",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "if (pm.response.code === 200) {",
+                                    "    const json = pm.response.json();",
+                                    "    pm.collectionVariables.set('access_token', json.data.tokens.accessToken);",
+                                    "    pm.collectionVariables.set('refresh_token', json.data.tokens.refreshToken);",
+                                    "    pm.collectionVariables.set('user_id', json.data.user.id);",
+                                    "    console.log('Logged in. Tokens saved automatically.');",
+                                    "}"
+                                ]
+                            }
+                        }
+                    ],
                     "request": {
                         "method": "POST",
                         "header": [
-                            {
-                                "key": "Content-Type",
-                                "value": "application/json"
-                            }
+                            { "key": "Content-Type", "value": "application/json" }
                         ],
                         "body": {
                             "mode": "raw",
-                            "raw": "{\n  \"email\": \"john@example.com\",\n  \"password\": \"SecurePass123!\"\n}"
+                            "raw": "{\n  \"email\": \"john@example.com\",\n  \"password\": \"SecurePass123!\"\n}",
+                            "options": { "raw": { "language": "json" } }
                         },
                         "url": {
                             "raw": "{{base_url}}/api/v1/auth/login",
-                            "host": [
-                                "{{base_url}}"
-                            ],
-                            "path": [
-                                "api",
-                                "v1",
-                                "auth",
-                                "login"
-                            ]
+                            "host": ["{{base_url}}"],
+                            "path": ["api", "v1", "auth", "login"]
                         },
-                        "description": "Login with email and password"
+                        "description": "Login with email and password. **Automatically saves** `access_token`, `refresh_token`, and `user_id`.\n\nIf 2FA is enabled, also include `\"twoFactorToken\": \"123456\"` in the body.\n\n**Rate limit:** 5 requests / 15 minutes"
                     },
                     "response": []
                 },
@@ -75,54 +94,51 @@
                     "request": {
                         "method": "POST",
                         "header": [
-                            {
-                                "key": "Authorization",
-                                "value": "Bearer {{access_token}}"
-                            }
+                            { "key": "Authorization", "value": "Bearer {{access_token}}" }
                         ],
                         "url": {
                             "raw": "{{base_url}}/api/v1/auth/logout",
-                            "host": [
-                                "{{base_url}}"
-                            ],
-                            "path": [
-                                "api",
-                                "v1",
-                                "auth",
-                                "logout"
-                            ]
+                            "host": ["{{base_url}}"],
+                            "path": ["api", "v1", "auth", "logout"]
                         },
-                        "description": "Logout user and invalidate tokens"
+                        "description": "Invalidates the current access token (blacklisted in Redis) and removes the refresh token. After logout, the `access_token` can no longer be used even if it hasn't expired."
                     },
                     "response": []
                 },
                 {
                     "name": "Refresh Token",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "if (pm.response.code === 200) {",
+                                    "    const json = pm.response.json();",
+                                    "    pm.collectionVariables.set('access_token', json.data.tokens.accessToken);",
+                                    "    pm.collectionVariables.set('refresh_token', json.data.tokens.refreshToken);",
+                                    "    console.log('New tokens saved.');",
+                                    "}"
+                                ]
+                            }
+                        }
+                    ],
                     "request": {
                         "method": "POST",
                         "header": [
-                            {
-                                "key": "Content-Type",
-                                "value": "application/json"
-                            }
+                            { "key": "Content-Type", "value": "application/json" }
                         ],
                         "body": {
                             "mode": "raw",
-                            "raw": "{\n  \"refreshToken\": \"{{refresh_token}}\"\n}"
+                            "raw": "{\n  \"refreshToken\": \"{{refresh_token}}\"\n}",
+                            "options": { "raw": { "language": "json" } }
                         },
                         "url": {
                             "raw": "{{base_url}}/api/v1/auth/refresh-token",
-                            "host": [
-                                "{{base_url}}"
-                            ],
-                            "path": [
-                                "api",
-                                "v1",
-                                "auth",
-                                "refresh-token"
-                            ]
+                            "host": ["{{base_url}}"],
+                            "path": ["api", "v1", "auth", "refresh-token"]
                         },
-                        "description": "Get new access token using refresh token"
+                        "description": "Exchange a valid refresh token for a new access token + refresh token pair. **Automatically updates** `access_token` and `refresh_token` variables."
                     },
                     "response": []
                 },

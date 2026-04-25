@@ -16,6 +16,8 @@ const errorHandler = require('./src/middleware/errorHandler');
 const authRoutes = require('./src/routes/auth');
 const chatRoutes = require('./src/routes/chat');
 const groupRoutes = require('./src/routes/group');
+const userRoutes = require('./src/routes/user');
+const uploadRoutes = require('./src/routes/upload');
 const healthRoutes = require('./src/routes/health');
 
 dotenv.config();
@@ -24,7 +26,7 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
     cors: {
-        origin: process.env.ALLOWED_ORIGINS?.split(',') || ['http://localhost:3000'],
+        origin: process.env.ALLOWED_ORIGINS?.split(',') || ['http://localhost:3000', 'http://localhost:5173'],
         credentials: true
     }
 });
@@ -42,6 +44,8 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 app.use(`/api/${process.env.API_VERSION || 'v1'}/auth`, authRoutes);
 app.use(`/api/${process.env.API_VERSION || 'v1'}/chat`, chatRoutes);
 app.use(`/api/${process.env.API_VERSION || 'v1'}/group`, groupRoutes);
+app.use(`/api/${process.env.API_VERSION || 'v1'}/users`, userRoutes);
+app.use(`/api/${process.env.API_VERSION || 'v1'}/upload`, uploadRoutes);
 app.use(`/api/${process.env.API_VERSION || 'v1'}`, healthRoutes);
 
 app.use(errorHandler);

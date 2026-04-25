@@ -11,11 +11,12 @@ const compress = util.promisify(zlib.deflate);
 const decompress = util.promisify(zlib.inflate);
 
 const setupSocket = async (io) => {
-    const pubClient = redisClient.duplicate();
-    const subClient = redisClient.duplicate();
-
-    await Promise.all([pubClient.connect(), subClient.connect()]);
-    io.adapter(createAdapter(pubClient, subClient));
+    if (process.env.NODE_ENV !== 'test') {
+        const pubClient = redisClient.duplicate();
+        const subClient = redisClient.duplicate();
+        await Promise.all([pubClient.connect(), subClient.connect()]);
+        io.adapter(createAdapter(pubClient, subClient));
+    }
 
     io.use(async (socket, next) => {
         try {
@@ -49,6 +50,12 @@ const setupSocket = async (io) => {
                 lastSeen: new Date()
             });
 
+            // Broadcast online status
+            socket.broadcast.emit('userStatusChanged', {
+                userId: socket.userId,
+                isOnline: true
+            });
+
             socket.join(`user:${socket.userId}`);
 
             socket.on('joinPrivateChat', async (data) => {
@@ -61,6 +68,7 @@ const setupSocket = async (io) => {
 
                     const room = [socket.userId, recipientId].sort().join('-');
                     socket.join(room);
+                    console.log(`User ${socket.userId} joined private room: ${room} (recipient: ${recipientId})`);
 
                     logger.info(`User ${socket.userId} joined private chat with ${recipientId}`);
                     socket.emit('joinedPrivateChat', { room, recipientId });
@@ -79,7 +87,7 @@ const setupSocket = async (io) => {
                     }
 
                     const group = await Group.findById(groupId);
-                    if (!group || !group.members.includes(socket.userId)) {
+                    if (!group || !group.members.some(m => m.toString() === socket.userId)) {
                         socket.emit('error', { message: 'Access denied to group' });
                         return;
                     }
@@ -95,32 +103,54 @@ const setupSocket = async (io) => {
 
             socket.on('sendPrivateMessage', async (data) => {
                 try {
-                    let { recipientId, content } = data;
+                    const { recipientId, content, fileUrl, fileName, fileType, fileSize, replyTo, isForwarded } = data;
 
-                    if (!recipientId || !content?.trim()) {
-                        socket.emit('error', { message: 'Recipient ID and content are required' });
+                    if (!recipientId || (!content?.trim() && !fileUrl)) {
+                        socket.emit('error', { message: 'Recipient ID and content/file are required' });
                         return;
                     }
 
-                    if (content.length > 1000) {
-                        content = (await compress(Buffer.from(content))).toString('base64');
+                    const originalPrivateLength = content?.length || 0;
+                    let processedContent = content?.trim() || '';
+                    if (originalPrivateLength > 1000) {
+                        processedContent = (await compress(Buffer.from(processedContent))).toString('base64');
                     }
 
                     const message = new Message({
                         sender: socket.userId,
                         recipient: recipientId,
-                        content: content.trim(),
+                        content: processedContent,
+                        fileUrl,
+                        fileName,
+                        fileType,
+                        fileSize,
                         chatType: 'private',
-                        isCompressed: content.length > 1000
+                        isCompressed: originalPrivateLength > 1000,
+                        replyTo,
+                        isForwarded
                     });
 
                     await message.save();
-                    await message.populate('sender', 'username avatar');
+                    await message.populate([
+                        { path: 'sender', select: 'username avatar' },
+                        { path: 'replyTo', populate: { path: 'sender', select: 'username' } }
+                    ]);
+
+                    // Decompress reply content if needed
+                    if (message.replyTo && message.replyTo.isCompressed) {
+                        try {
+                            const decompressed = await decompress(Buffer.from(message.replyTo.content, 'base64'));
+                            message.replyTo.content = decompressed.toString();
+                        } catch (err) {
+                            logger.error('Reply content decompression error:', err);
+                        }
+                    }
 
                     const room = [socket.userId, recipientId].sort().join('-');
+                    console.log(`Sending private message from ${socket.userId} in room: ${room}`);
                     io.to(room).emit('newPrivateMessage', message);
 
-                    logger.info(`Private message sent from ${socket.userId} to ${recipientId}`);
+                    logger.info(`Private message sent from ${socket.userId} to ${recipientId} in room ${room}`);
                 } catch (error) {
                     logger.error('Error sending private message:', error);
                     socket.emit('error', { message: 'Failed to send message' });
@@ -129,27 +159,48 @@ const setupSocket = async (io) => {
 
             socket.on('sendGroupMessage', async (data) => {
                 try {
-                    let { groupId, content } = data;
+                    const { groupId, content, fileUrl, fileName, fileType, fileSize, replyTo, isForwarded } = data;
 
-                    if (!groupId || !content?.trim()) {
-                        socket.emit('error', { message: 'Group ID and content are required' });
+                    if (!groupId || (!content?.trim() && !fileUrl)) {
+                        socket.emit('error', { message: 'Group ID and content/file are required' });
                         return;
                     }
 
-                    if (content.length > 1000) {
-                        content = (await compress(Buffer.from(content))).toString('base64');
+                    const originalGroupLength = content?.length || 0;
+                    let processedContent = content?.trim() || '';
+                    if (originalGroupLength > 1000) {
+                        processedContent = (await compress(Buffer.from(processedContent))).toString('base64');
                     }
 
                     const message = new Message({
                         sender: socket.userId,
                         group: groupId,
-                        content: content.trim(),
+                        content: processedContent,
+                        fileUrl,
+                        fileName,
+                        fileType,
+                        fileSize,
                         chatType: 'group',
-                        isCompressed: content.length > 1000
+                        isCompressed: originalGroupLength > 1000,
+                        replyTo,
+                        isForwarded
                     });
 
                     await message.save();
-                    await message.populate('sender', 'username avatar');
+                    await message.populate([
+                        { path: 'sender', select: 'username avatar' },
+                        { path: 'replyTo', populate: { path: 'sender', select: 'username' } }
+                    ]);
+
+                    // Decompress reply content if needed
+                    if (message.replyTo && message.replyTo.isCompressed) {
+                        try {
+                            const decompressed = await decompress(Buffer.from(message.replyTo.content, 'base64'));
+                            message.replyTo.content = decompressed.toString();
+                        } catch (err) {
+                            logger.error('Reply content decompression error:', err);
+                        }
+                    }
 
                     io.to(`group:${groupId}`).emit('newGroupMessage', message);
 
@@ -185,43 +236,62 @@ const setupSocket = async (io) => {
             socket.on('addReaction', async (data) => {
                 try {
                     const { messageId, reaction } = data;
-                    if (!messageId || !['like', 'love', 'laugh', 'sad', 'angry'].includes(reaction)) {
-                        socket.emit('error', { message: 'Invalid message ID or reaction' });
-                        return;
-                    }
+                    if (!messageId || !reaction) return;
 
                     const message = await Message.findById(messageId);
-                    if (!message || message.isDeleted) {
-                        socket.emit('error', { message: 'Message not found' });
-                        return;
+                    if (!message || message.isDeleted) return;
+
+                    // Prevent reacting to own message
+                    if (message.sender.toString() === socket.userId) {
+                        return socket.emit('error', { message: 'Cannot react to your own message' });
                     }
 
-                    const existingReaction = message.reactions.find(r =>
-                        r.user.toString() === socket.userId && r.reaction === reaction
+                    const existingIdx = message.reactions.findIndex(
+                        (r) => r.user.toString() === socket.userId
                     );
-                    if (existingReaction) {
-                        socket.emit('error', { message: 'Reaction already exists' });
-                        return;
+
+                    if (existingIdx > -1) {
+                        if (message.reactions[existingIdx].reaction === reaction) {
+                            message.reactions.splice(existingIdx, 1); // Toggle off
+                        } else {
+                            message.reactions[existingIdx].reaction = reaction; // Change
+                        }
+                    } else {
+                        message.reactions.push({ user: socket.userId, reaction }); // Add new
                     }
 
-                    message.reactions.push({ user: socket.userId, reaction });
                     await message.save();
 
-                    const targetRoom = message.chatType === 'private'
-                        ? [message.sender.toString(), message.recipient.toString()].sort().join('-')
-                        : `group:${message.group}`;
+                    const payload = {
+                        messageId: message._id,
+                        reactions: message.reactions
+                    };
 
-                    io.to(targetRoom).emit('messageReactionAdded', {
-                        messageId,
-                        reaction,
-                        userId: socket.userId,
-                        username: socket.user.username
-                    });
+                    // Emit to the reactor directly (they may not be in the private room)
+                    socket.emit('messageReactionUpdated', payload);
 
-                    logger.info(`Reaction ${reaction} added to message ${messageId} by ${socket.userId}`);
+                    // Emit to the message sender (via their personal room)
+                    const senderId = message.sender.toString();
+                    if (senderId !== socket.userId) {
+                        io.to(`user:${senderId}`).emit('messageReactionUpdated', payload);
+                    }
+
+                    // For private chat: also emit to recipient's personal room
+                    if (message.chatType === 'private') {
+                        const recipientId = message.recipient.toString();
+                        if (recipientId !== socket.userId) {
+                            io.to(`user:${recipientId}`).emit('messageReactionUpdated', payload);
+                        }
+                    }
+
+                    // Also emit to the chat room for any other listeners (e.g. group)
+                    if (message.chatType === 'group') {
+                        io.to(`group:${message.group}`).emit('messageReactionUpdated', payload);
+                    }
+
+                    logger.info(`Reaction ${reaction} on message ${messageId} by ${socket.userId}`);
                 } catch (error) {
                     logger.error('Error adding reaction:', error);
-                    socket.emit('error', { message: 'Failed to add reaction' });
                 }
             });
 
@@ -260,6 +330,12 @@ const setupSocket = async (io) => {
                     await User.findByIdAndUpdate(socket.userId, {
                         isOnline: false,
                         lastSeen: new Date()
+                    });
+
+                    // Broadcast offline status
+                    socket.broadcast.emit('userStatusChanged', {
+                        userId: socket.userId,
+                        isOnline: false
                     });
 
                     logger.info(`User disconnected: ${socket.user.username} (${socket.userId})`);

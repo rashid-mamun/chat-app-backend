@@ -59,6 +59,14 @@ const messageSchema = new mongoose.Schema({
     editedAt: {
         type: Date
     },
+    isForwarded: {
+        type: Boolean,
+        default: false
+    },
+    replyTo: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Message'
+    },
     isDeleted: {
         type: Boolean,
         default: false
@@ -74,7 +82,7 @@ const messageSchema = new mongoose.Schema({
         },
         reaction: {
             type: String,
-            enum: ['like', 'love', 'laugh', 'sad', 'angry'],
+            enum: ['👍', '❤️', '😂', '😮', '😢', '🔥', 'like', 'love', 'laugh', 'sad', 'angry'],
             required: true
         },
         createdAt: {

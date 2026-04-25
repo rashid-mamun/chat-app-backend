@@ -609,11 +609,145 @@ describe('Chat Controller', () => {
         it('should return error without authentication', async () => {
             const response = await request(app)
                 .post('/api/v1/chat/upload')
-                .attach('file', path.join(__dirname, '../../../test-files/test.txt'))
                 .expect(401);
 
             expect(response.body.success).toBe(false);
             expect(response.body.message).toBe('Access token is required');
+        });
+
+        it('should reject invalid file type', async () => {
+            // Write a fake exe buffer with the right field name
+            const response = await request(app)
+                .post('/api/v1/chat/upload')
+                .set('Authorization', `Bearer ${accessToken1}`)
+                .attach('file', Buffer.from('MZ fake exe content'), {
+                    filename: 'malware.exe',
+                    contentType: 'application/octet-stream'
+                })
+                .expect(400);
+
+            expect(response.body.success).toBe(false);
+            expect(response.body.message).toBe('Invalid file type');
+        });
+    });
+
+    // ─── ADDITIONAL CORNER CASE TESTS ────────────────────────────────────────
+
+    describe('GET /api/v1/chat/group/:groupId — non-member access', () => {
+        it('should return 403 for non-member trying to get group messages', async () => {
+            const response = await request(app)
+                .get(`/api/v1/chat/group/${group1._id}`)
+                .set('Authorization', `Bearer ${accessToken3}`)   // user3 not in group1
+                .expect(403);
+
+            expect(response.body.success).toBe(false);
+            expect(response.body.message).toBe('Access denied to group');
+        });
+    });
+
+    describe('POST /api/v1/chat/messages/:messageId/pin — deleted message', () => {
+        it('should return 404 when pinning an already deleted message', async () => {
+            const msg = await Message.create({
+                sender: user1._id,
+                recipient: user2._id,
+                content: 'To be deleted',
+                chatType: 'private',
+                isDeleted: true,
+                deletedAt: new Date()
+            });
+
+            const response = await request(app)
+                .post(`/api/v1/chat/messages/${msg._id}/pin`)
+                .set('Authorization', `Bearer ${accessToken1}`)
+                .expect(404);
+
+            expect(response.body.success).toBe(false);
+            expect(response.body.message).toBe('Message not found');
+        });
+    });
+
+    describe('PUT /api/v1/chat/messages/:messageId — content over 1000 chars', () => {
+        it('should return 400 when editing message content exceeds 1000 characters', async () => {
+            const msg = await Message.create({
+                sender: user1._id,
+                recipient: user2._id,
+                content: 'Original short content',
+                chatType: 'private'
+            });
+
+            const longContent = 'A'.repeat(1001);  // 1001 chars
+
+            const response = await request(app)
+                .put(`/api/v1/chat/messages/${msg._id}`)
+                .set('Authorization', `Bearer ${accessToken1}`)
+                .send({ content: longContent })
+                .expect(400);
+
+            expect(response.body.success).toBe(false);
+            expect(response.body.message).toBe('Validation failed');
+        });
+    });
+
+    describe('GET /api/v1/chat/messages/search — empty query', () => {
+        it('should return all messages in chat when query is empty', async () => {
+            await Message.create([
+                {
+                    sender: user1._id,
+                    recipient: user2._id,
+                    content: 'First message',
+                    chatType: 'private'
+                },
+                {
+                    sender: user2._id,
+                    recipient: user1._id,
+                    content: 'Second message',
+                    chatType: 'private'
+                }
+            ]);
+
+            const response = await request(app)
+                .get('/api/v1/chat/messages/search')
+                .query({
+                    chatType: 'private',
+                    chatId: user2._id.toString()
+                    // no query param = empty search
+                })
+                .set('Authorization', `Bearer ${accessToken1}`)
+                .expect(200);
+
+            expect(response.body.success).toBe(true);
+            expect(response.body.data.length).toBeGreaterThanOrEqual(2);
+        });
+    });
+
+    describe('GET /api/v1/chat/messages/search/advanced — pagination metadata', () => {
+        it('should return correct total and totalPages in advanced search', async () => {
+            // Create 5 messages
+            const messages = Array.from({ length: 5 }, (_, i) => ({
+                sender: user1._id,
+                recipient: user2._id,
+                content: `Pagination test message ${i + 1}`,
+                chatType: 'private'
+            }));
+            await Message.create(messages);
+
+            const response = await request(app)
+                .get('/api/v1/chat/messages/search/advanced')
+                .query({
+                    query: 'Pagination',
+                    chatType: 'private',
+                    chatId: user2._id.toString(),
+                    page: 1,
+                    limit: 2
+                })
+                .set('Authorization', `Bearer ${accessToken1}`)
+                .expect(200);
+
+            expect(response.body.success).toBe(true);
+            expect(response.body.data.total).toBe(5);
+            expect(response.body.data.totalPages).toBe(3);   // ceil(5/2) = 3
+            expect(response.body.data.page).toBe(1);
+            expect(response.body.data.messages).toHaveLength(2);
         });
     });
 });

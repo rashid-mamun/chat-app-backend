@@ -1,2 +1,2 @@
-This is a test file for file upload testing.
-It contains some sample text content. 
+This is a test file for upload testing in the chat application.
+It is used by Jest tests to verify file upload functionality.

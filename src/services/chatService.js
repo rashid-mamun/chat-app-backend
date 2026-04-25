@@ -19,6 +19,10 @@ const getPrivateMessages = async (userId, recipientId, page = 1, limit = 20) => 
             ]
         })
             .populate('sender', 'username')
+            .populate({
+                path: 'replyTo',
+                populate: { path: 'sender', select: 'username' }
+            })
             .sort({ createdAt: -1 })
             .skip(skip)
             .limit(limit)
@@ -52,6 +56,10 @@ const getGroupMessages = async (groupId, userId, page = 1, limit = 20) => {
         const skip = (page - 1) * limit;
         const messages = await Message.find({ group: groupId, chatType: 'group' })
             .populate('sender', 'username')
+            .populate({
+                path: 'replyTo',
+                populate: { path: 'sender', select: 'username' }
+            })
             .sort({ createdAt: -1 })
             .skip(skip)
             .limit(limit)
@@ -104,7 +112,8 @@ const getUserChats = async (userId) => {
         });
 
         const groupChats = await Group.find({ members: userId })
-            .select('name members admins')
+            .populate('members', 'username email avatar isOnline status lastSeen')
+            .populate('admins', 'username email avatar')
             .lean();
 
         return { privateChats, groupChats };
@@ -236,5 +245,6 @@ module.exports = {
     getGroupMessages,
     getUserChats,
     searchMessages,
-    searchMessagesAdvanced
+    searchMessagesAdvanced,
+    compress
 };

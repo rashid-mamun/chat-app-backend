@@ -35,6 +35,11 @@ const userSchema = new mongoose.Schema({
     type: String,
     default: null
   },
+  bio: {
+    type: String,
+    maxlength: [150, 'Bio cannot exceed 150 characters'],
+    default: ''
+  },
   status: {
     type: String,
     enum: ['active', 'inactive', 'banned'],
@@ -74,6 +79,7 @@ userSchema.virtual('profile').get(function () {
     username: this.username,
     email: this.email,
     avatar: this.avatar,
+    bio: this.bio,
     status: this.status,
     lastSeen: this.lastSeen,
     isOnline: this.isOnline

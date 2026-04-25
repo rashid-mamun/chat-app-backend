@@ -40,7 +40,7 @@ const register = async ({ username, email, password }) => {
             EX: 7 * 24 * 60 * 60 // 7 days in seconds
         });
 
-        return { user: { id: user._id, username, email }, tokens };
+        return { user: { _id: user._id, username, email }, tokens };
     } catch (error) {
         logger.error('Error registering user:', error);
 
@@ -66,9 +66,13 @@ const register = async ({ username, email, password }) => {
 
 const login = async ({ email, password, twoFactorToken }) => {
     try {
-        const user = await User.findOne({ email }).select('+password +twoFactorSecret');
+        const user = await User.findOne({ email }).select('+password +twoFactorSecret +status');
         if (!user || !(await user.comparePassword(password))) {
             throw new AppError('Invalid credentials', 401);
+        }
+
+        if (user.status === 'banned') {
+            throw new AppError('Account is banned', 401);
         }
 
         if (user.twoFactorEnabled) {
@@ -93,9 +97,18 @@ const login = async ({ email, password, twoFactorToken }) => {
     }
 };
 
-const logout = async (userId) => {
+const logout = async (userId, accessToken) => {
     try {
         await redisClient.del(`refresh_token:${userId}`);
+
+        // Blacklist the access token so it cannot be reused after logout.
+        // The authMiddleware already checks `blacklist:${token}` on every request.
+        if (accessToken) {
+            const expireSeconds = 15 * 60; // match JWT_EXPIRE of 15 minutes
+            await redisClient.set(`blacklist:${accessToken}`, '1', {
+                EX: expireSeconds
+            });
+        }
     } catch (error) {
         logger.error('Error logging out user:', error);
         throw new AppError('Failed to logout', 500);
@@ -220,7 +233,7 @@ const getProfile = async (userId) => {
 
 const updateProfile = async (userId, updateData) => {
     try {
-        const { username, avatar } = updateData;
+        const { username, avatar, bio } = updateData;
         const updateFields = {};
 
         if (username) {
@@ -231,8 +244,12 @@ const updateProfile = async (userId, updateData) => {
             updateFields.username = username;
         }
 
-        if (avatar) {
+        if (avatar !== undefined) {
             updateFields.avatar = avatar;
+        }
+
+        if (bio !== undefined) {
+            updateFields.bio = bio;
         }
 
         const user = await User.findByIdAndUpdate(
