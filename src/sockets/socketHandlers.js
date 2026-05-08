@@ -68,9 +68,7 @@ const setupSocket = async (io) => {
 
                     const room = [socket.userId, recipientId].sort().join('-');
                     socket.join(room);
-                    console.log(`User ${socket.userId} joined private room: ${room} (recipient: ${recipientId})`);
-
-                    logger.info(`User ${socket.userId} joined private chat with ${recipientId}`);
+                    logger.debug(`User ${socket.userId} joined private chat with ${recipientId}`);
                     socket.emit('joinedPrivateChat', { room, recipientId });
                 } catch (error) {
                     logger.error('Error joining private chat:', error);
@@ -107,6 +105,28 @@ const setupSocket = async (io) => {
 
                     if (!recipientId || (!content?.trim() && !fileUrl)) {
                         socket.emit('error', { message: 'Recipient ID and content/file are required' });
+                        return;
+                    }
+
+                    const [senderUser, recipientUser] = await Promise.all([
+                        User.findById(socket.userId),
+                        User.findById(recipientId)
+                    ]);
+
+                    if (!senderUser || !recipientUser) {
+                        socket.emit('error', { message: 'User not found' });
+                        return;
+                    }
+
+                    // Check if sender has blocked recipient
+                    if (senderUser.blockedUsers.includes(recipientId)) {
+                        socket.emit('error', { message: 'You have blocked this user' });
+                        return;
+                    }
+
+                    // Check if recipient has blocked sender
+                    if (recipientUser.blockedUsers.includes(socket.userId)) {
+                        socket.emit('error', { message: 'You are blocked by this user' });
                         return;
                     }
 
@@ -147,7 +167,6 @@ const setupSocket = async (io) => {
                     }
 
                     const room = [socket.userId, recipientId].sort().join('-');
-                    console.log(`Sending private message from ${socket.userId} in room: ${room}`);
                     io.to(room).emit('newPrivateMessage', message);
 
                     logger.info(`Private message sent from ${socket.userId} to ${recipientId} in room ${room}`);
@@ -322,6 +341,22 @@ const setupSocket = async (io) => {
                     socket.to(`group:${groupId}`).emit('userStoppedTyping', {
                         userId: socket.userId
                     });
+                }
+            });
+
+            socket.on('groupAction', async (data) => {
+                const { type, groupId, targetUserId, details } = data;
+                if (type === 'invite') {
+                    io.to(`user:${targetUserId}`).emit('newGroupInvite', { groupId, inviterId: socket.userId, details });
+                } else if (type === 'joinRequest') {
+                    const group = await Group.findById(groupId);
+                    if (group) {
+                        group.admins.forEach(adminId => {
+                            io.to(`user:${adminId.toString()}`).emit('newJoinRequest', { groupId, userId: socket.userId, details });
+                        });
+                    }
+                } else if (type === 'memberUpdate') {
+                    io.to(`group:${groupId}`).emit('groupMemberUpdate', { groupId, action: details.action, userId: targetUserId });
                 }
             });
 

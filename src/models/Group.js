@@ -15,6 +15,30 @@ const groupSchema = new mongoose.Schema({
         type: mongoose.Schema.Types.ObjectId,
         ref: 'User'
     }],
+    avatar: {
+        type: String,
+        default: null
+    },
+    privacy: {
+        type: String,
+        enum: ['public', 'private'],
+        default: 'public'
+    },
+    inviteCode: {
+        type: String,
+        unique: true
+    },
+    joinRequests: [{
+        user: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+        status: { type: String, enum: ['pending', 'approved', 'rejected'], default: 'pending' },
+        createdAt: { type: Date, default: Date.now }
+    }],
+    invites: [{
+        user: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+        inviter: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+        status: { type: String, enum: ['pending', 'accepted', 'rejected'], default: 'pending' },
+        createdAt: { type: Date, default: Date.now }
+    }],
     createdAt: {
         type: Date,
         default: Date.now

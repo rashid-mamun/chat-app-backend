@@ -2,7 +2,7 @@
     "info": {
         "_postman_id": "chat-app-backend-collection",
         "name": "Chat App Backend",
-        "description": "Complete API collection for the Chat App Backend with all endpoints including authentication, messaging, groups, and file uploads.",
+        "description": "Complete API collection for the Chat App Backend with all endpoints including authentication, messaging, groups, and file uploads.\n\n**SECURITY NOTICE (2026-05-07):**\n- Secret logging (2FA secrets, tokens) has been removed from application logs\n- Console debug output has been replaced with structured logger.debug calls\n- Chat clearing operations now use soft-delete (messages marked isDeleted=true, not hard-deleted)\n- All sensitive operations maintain audit trails via logger\n\n**Rate Limits:**\n- Auth endpoints: 5 requests per 15 minutes\n- Message endpoints: 30 messages per minute (REST)\n- Socket.io: Currently unlimited (rate limiting deferred)\n\n**Password Requirements:** Min 8 chars, 1 uppercase, 1 lowercase, 1 number, 1 special character\n\n**Upload Limits:** Max 10MB, allowed types: images, PDF, documents, spreadsheets",
         "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
         "_exporter_id": "chat-app-backend"
     },
@@ -40,12 +40,23 @@
                         "body": {
                             "mode": "raw",
                             "raw": "{\n  \"username\": \"john_doe\",\n  \"email\": \"john@example.com\",\n  \"password\": \"SecurePass123!\"\n}",
-                            "options": { "raw": { "language": "json" } }
+                            "options": {
+                                "raw": {
+                                    "language": "json"
+                                }
+                            }
                         },
                         "url": {
                             "raw": "{{base_url}}/api/v1/auth/register",
-                            "host": ["{{base_url}}"],
-                            "path": ["api", "v1", "auth", "register"]
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "auth",
+                                "register"
+                            ]
                         },
                         "description": "Register a new user. **Automatically saves** `access_token`, `refresh_token`, and `user_id` to collection variables.\n\n**Rate limit:** 5 requests / 15 minutes\n\n**Password rules:** min 8 chars, at least one uppercase, one number, one special character."
                     },
@@ -73,17 +84,31 @@
                     "request": {
                         "method": "POST",
                         "header": [
-                            { "key": "Content-Type", "value": "application/json" }
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
                         ],
                         "body": {
                             "mode": "raw",
                             "raw": "{\n  \"email\": \"john@example.com\",\n  \"password\": \"SecurePass123!\"\n}",
-                            "options": { "raw": { "language": "json" } }
+                            "options": {
+                                "raw": {
+                                    "language": "json"
+                                }
+                            }
                         },
                         "url": {
                             "raw": "{{base_url}}/api/v1/auth/login",
-                            "host": ["{{base_url}}"],
-                            "path": ["api", "v1", "auth", "login"]
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "auth",
+                                "login"
+                            ]
                         },
                         "description": "Login with email and password. **Automatically saves** `access_token`, `refresh_token`, and `user_id`.\n\nIf 2FA is enabled, also include `\"twoFactorToken\": \"123456\"` in the body.\n\n**Rate limit:** 5 requests / 15 minutes"
                     },
@@ -94,12 +119,22 @@
                     "request": {
                         "method": "POST",
                         "header": [
-                            { "key": "Authorization", "value": "Bearer {{access_token}}" }
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{access_token}}"
+                            }
                         ],
                         "url": {
                             "raw": "{{base_url}}/api/v1/auth/logout",
-                            "host": ["{{base_url}}"],
-                            "path": ["api", "v1", "auth", "logout"]
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "auth",
+                                "logout"
+                            ]
                         },
                         "description": "Invalidates the current access token (blacklisted in Redis) and removes the refresh token. After logout, the `access_token` can no longer be used even if it hasn't expired."
                     },
@@ -126,17 +161,31 @@
                     "request": {
                         "method": "POST",
                         "header": [
-                            { "key": "Content-Type", "value": "application/json" }
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
                         ],
                         "body": {
                             "mode": "raw",
                             "raw": "{\n  \"refreshToken\": \"{{refresh_token}}\"\n}",
-                            "options": { "raw": { "language": "json" } }
+                            "options": {
+                                "raw": {
+                                    "language": "json"
+                                }
+                            }
                         },
                         "url": {
                             "raw": "{{base_url}}/api/v1/auth/refresh-token",
-                            "host": ["{{base_url}}"],
-                            "path": ["api", "v1", "auth", "refresh-token"]
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "api",
+                                "v1",
+                                "auth",
+                                "refresh-token"
+                            ]
                         },
                         "description": "Exchange a valid refresh token for a new access token + refresh token pair. **Automatically updates** `access_token` and `refresh_token` variables."
                     },

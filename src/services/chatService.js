@@ -16,7 +16,8 @@ const getPrivateMessages = async (userId, recipientId, page = 1, limit = 20) => 
             $or: [
                 { sender: userId, recipient: recipientId, chatType: 'private' },
                 { sender: recipientId, recipient: userId, chatType: 'private' }
-            ]
+            ],
+            isDeleted: { $ne: true }
         })
             .populate('sender', 'username')
             .populate({
@@ -54,7 +55,7 @@ const getGroupMessages = async (groupId, userId, page = 1, limit = 20) => {
         }
 
         const skip = (page - 1) * limit;
-        const messages = await Message.find({ group: groupId, chatType: 'group' })
+        const messages = await Message.find({ group: groupId, chatType: 'group', isDeleted: { $ne: true } })
             .populate('sender', 'username')
             .populate({
                 path: 'replyTo',
@@ -87,7 +88,8 @@ const getUserChats = async (userId) => {
     try {
         const privateMessages = await Message.find({
             $or: [{ sender: userId }, { recipient: userId }],
-            chatType: 'private'
+            chatType: 'private',
+            isDeleted: { $ne: true }
         })
             .populate('sender', 'username')
             .populate('recipient', 'username')
@@ -105,8 +107,10 @@ const getUserChats = async (userId) => {
             const msg = privateMessages.find(m =>
                 m.sender._id.toString() === id || m.recipient._id.toString() === id
             );
+            const otherUser = msg.sender._id.toString() === userId.toString() ? msg.recipient : msg.sender;
             return {
-                user: msg.sender._id.toString() === userId.toString() ? msg.recipient : msg.sender,
+                _id: otherUser._id,
+                user: otherUser,
                 lastMessage: msg.content
             };
         });
@@ -125,7 +129,11 @@ const getUserChats = async (userId) => {
 
 const searchMessages = async (userId, query, chatType, chatId, page = 1, limit = 20) => {
     try {
-        const baseQuery = { chatType };
+        const baseQuery = { chatType, isDeleted: false };
+        if (query) {
+            baseQuery.content = { $regex: query, $options: 'i' };
+        }
+
         if (chatType === 'private') {
             // Convert string chatId to ObjectId if needed
             const recipientId = typeof chatId === 'string' ? new mongoose.Types.ObjectId(chatId) : chatId;
@@ -176,23 +184,42 @@ const searchMessages = async (userId, query, chatType, chatId, page = 1, limit =
 const searchMessagesAdvanced = async (userId, query, filters = {}) => {
     try {
         const { chatType, chatId, startDate, endDate, fileType, page = 1, limit = 20 } = filters;
-        const baseQuery = { chatType };
+        const baseQuery = { isDeleted: false };
 
         if (chatType === 'private') {
-            // Convert string chatId to ObjectId if needed
-            const recipientId = typeof chatId === 'string' ? new mongoose.Types.ObjectId(chatId) : chatId;
-            baseQuery.$or = [
-                { sender: userId, recipient: recipientId },
-                { sender: recipientId, recipient: userId }
-            ];
-        } else if (chatType === 'group') {
-            // Convert string chatId to ObjectId if needed
-            const groupId = typeof chatId === 'string' ? new mongoose.Types.ObjectId(chatId) : chatId;
-            const group = await Group.findById(groupId).lean();
-            if (!group || !group.members.map(id => id.toString()).includes(userId.toString())) {
-                throw new AppError('Access denied to group', 403);
+            baseQuery.chatType = 'private';
+            if (chatId) {
+                const recipientId = typeof chatId === 'string' ? new mongoose.Types.ObjectId(chatId) : chatId;
+                baseQuery.$or = [
+                    { sender: userId, recipient: recipientId },
+                    { sender: recipientId, recipient: userId }
+                ];
+            } else {
+                baseQuery.$or = [
+                    { sender: userId },
+                    { recipient: userId }
+                ];
             }
-            baseQuery.group = groupId;
+        } else if (chatType === 'group') {
+            baseQuery.chatType = 'group';
+            if (chatId) {
+                const groupId = typeof chatId === 'string' ? new mongoose.Types.ObjectId(chatId) : chatId;
+                const group = await Group.findById(groupId).lean();
+                if (!group || !group.members.map(id => id.toString()).includes(userId.toString())) {
+                    throw new AppError('Access denied to group', 403);
+                }
+                baseQuery.group = groupId;
+            } else {
+                const groups = await Group.find({ members: userId }).select('_id').lean();
+                baseQuery.group = { $in: groups.map(g => g._id) };
+            }
+        } else {
+            // ALL CHATS
+            const groups = await Group.find({ members: userId }).select('_id').lean();
+            baseQuery.$or = [
+                { chatType: 'private', $or: [{ sender: userId }, { recipient: userId }] },
+                { chatType: 'group', group: { $in: groups.map(g => g._id) } }
+            ];
         }
 
         if (query) {
@@ -202,7 +229,9 @@ const searchMessagesAdvanced = async (userId, query, filters = {}) => {
             baseQuery.createdAt = { $gte: new Date(startDate) };
         }
         if (endDate) {
-            baseQuery.createdAt = { ...baseQuery.createdAt, $lte: new Date(endDate) };
+            const end = new Date(endDate);
+            end.setHours(23, 59, 59, 999);
+            baseQuery.createdAt = { ...baseQuery.createdAt, $lte: end };
         }
         if (fileType) {
             baseQuery.fileType = fileType;
@@ -212,6 +241,8 @@ const searchMessagesAdvanced = async (userId, query, filters = {}) => {
         const total = await Message.countDocuments(baseQuery);
         const messages = await Message.find(baseQuery)
             .populate('sender', 'username')
+            .populate('recipient', 'username email avatar status isOnline lastSeen')
+            .populate('group', 'name members admins description avatar')
             .sort({ createdAt: -1 })
             .skip(skip)
             .limit(limit)
@@ -240,11 +271,35 @@ const searchMessagesAdvanced = async (userId, query, filters = {}) => {
     }
 };
 
+const clearChat = async (userId, chatType, chatId) => {
+    try {
+        const query = { chatType };
+        if (chatType === 'private') {
+            const recipientId = typeof chatId === 'string' ? new mongoose.Types.ObjectId(chatId) : chatId;
+            query.$or = [
+                { sender: userId, recipient: recipientId },
+                { sender: recipientId, recipient: userId }
+            ];
+        } else {
+            const groupId = typeof chatId === 'string' ? new mongoose.Types.ObjectId(chatId) : chatId;
+            query.group = groupId;
+        }
+
+        // Soft delete all messages in this chat
+        const result = await Message.updateMany(query, { isDeleted: true, deletedAt: new Date() });
+        return true;
+    } catch (error) {
+        logger.error('Error clearing chat:', error);
+        throw new AppError('Failed to clear chat', 500);
+    }
+};
+
 module.exports = {
     getPrivateMessages,
     getGroupMessages,
     getUserChats,
     searchMessages,
     searchMessagesAdvanced,
-    compress
+    compress,
+    clearChat
 };
