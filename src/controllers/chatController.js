@@ -1,4 +1,4 @@
-const { getPrivateMessages, getGroupMessages, getUserChats, searchMessages, searchMessagesAdvanced } = require('../services/chatService');
+const { getPrivateMessages, getGroupMessages, getUserChats, searchMessages, searchMessagesAdvanced, clearChat } = require('../services/chatService');
 const { AppError } = require('../middleware/errorHandler');
 const Message = require('../models/Message');
 const Group = require('../models/Group');
@@ -222,6 +222,36 @@ const uploadFile = async (req, res, next) => {
     }
 };
 
+const clearChatController = async (req, res, next) => {
+    try {
+        const { chatType, chatId } = req.body;
+        await clearChat(req.user._id, chatType, chatId);
+
+        const io = req.app.locals.io;
+        if (chatType === 'private') {
+            const room = [req.user._id.toString(), chatId.toString()].sort().join('-');
+            io.to(room).to(`user:${req.user._id}`).to(`user:${chatId}`).emit('chatCleared', {
+                chatType,
+                chatId,
+                clearedBy: req.user._id
+            });
+        } else {
+            io.to(`group:${chatId}`).emit('chatCleared', {
+                chatType,
+                chatId,
+                clearedBy: req.user._id
+            });
+        }
+
+        res.json({
+            success: true,
+            message: 'Chat cleared successfully'
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
 module.exports = {
     getPrivateMessagesController,
     getGroupMessagesController,
@@ -231,5 +261,6 @@ module.exports = {
     pinMessage,
     deleteMessage,
     editMessage,
-    uploadFile
+    uploadFile,
+    clearChatController
 };

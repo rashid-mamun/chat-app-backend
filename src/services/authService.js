@@ -1,3 +1,4 @@
+const crypto = require('crypto');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const { authenticator } = require('otplib');
@@ -168,7 +169,7 @@ const setup2FA = async (userId) => {
             EX: 15 * 60 // 15 minutes
         });
 
-        logger.info(`2FA setup initiated for user: ${user.email}, secret: ${secret}, otpauth: ${otpauth}`);
+        logger.info(`2FA setup initiated for user: ${user.email}`);
         return { otpauth, secret };
     } catch (error) {
         logger.error('Error setting up 2FA:', error);
@@ -193,12 +194,12 @@ const verify2FA = async (userId, token) => {
             throw new AppError('2FA setup session expired or not found', 400);
         }
 
-        logger.info(`Verifying 2FA for user: ${user.email}, token: ${token}, secret: ${secret}`);
+        logger.debug(`Verifying 2FA for user: ${user.email}`);
 
         // Allow a time window of ±30 seconds (1 step before and after)
         const isValid = authenticator.verify({ token, secret, window: 1 });
         if (!isValid) {
-            logger.error(`2FA verification failed for user: ${user.email}, token: ${token}`);
+            logger.warn(`2FA verification failed for user: ${user.email}`);
             throw new AppError('Invalid 2FA token', 401);
         }
 
@@ -306,6 +307,71 @@ const changePassword = async (userId, currentPassword, newPassword) => {
     }
 };
 
+const forgotPassword = async (email) => {
+    try {
+        const user = await User.findOne({ email });
+        if (!user) {
+            // Do not reveal whether user exists for security
+            return { message: 'If an account with that email exists, we sent a password reset link.' };
+        }
+
+        // Generate token
+        const resetToken = crypto.randomBytes(32).toString('hex');
+        const hash = crypto.createHash('sha256').update(resetToken).digest('hex');
+
+        user.resetPasswordToken = hash;
+        user.resetPasswordExpires = Date.now() + 15 * 60 * 1000; // 15 mins
+        await user.save({ validateBeforeSave: false });
+
+        const resetUrl = `http://localhost:5173/reset-password/${resetToken}`;
+
+        // Mock sending email
+        logger.info(`[MOCK EMAIL] Password Reset Link for ${email}: ${resetUrl}`);
+
+        return { message: 'If an account with that email exists, we sent a password reset link.' };
+    } catch (error) {
+        logger.error('Error in forgotPassword:', error);
+        throw new AppError('Failed to process password reset request', 500);
+    }
+};
+
+const resetPassword = async (token, newPassword) => {
+    try {
+        const hash = crypto.createHash('sha256').update(token).digest('hex');
+
+        const user = await User.findOne({
+            resetPasswordToken: hash,
+            resetPasswordExpires: { $gt: Date.now() }
+        }).select('+password');
+
+        if (!user) {
+            throw new AppError('Token is invalid or has expired', 400);
+        }
+
+        user.password = newPassword;
+        user.resetPasswordToken = undefined;
+        user.resetPasswordExpires = undefined;
+        await user.save();
+
+        // Invalidate all sessions
+        await redisClient.del(`refresh_token:${user._id}`);
+
+        logger.info(`Password successfully reset for user: ${user.email}`);
+        return { message: 'Password has been successfully reset. You can now log in.' };
+    } catch (error) {
+        logger.error('Error in resetPassword:', error);
+        if (error instanceof AppError) throw error;
+
+        // Handle Mongoose validation errors
+        if (error.name === 'ValidationError') {
+            const validationErrors = Object.values(error.errors).map(err => err.message);
+            throw new AppError(`Validation failed: ${validationErrors.join(', ')}`, 400);
+        }
+
+        throw new AppError('Failed to reset password', 500);
+    }
+};
+
 module.exports = {
     register,
     login,
@@ -315,5 +381,7 @@ module.exports = {
     verify2FA,
     getProfile,
     updateProfile,
-    changePassword
+    changePassword,
+    forgotPassword,
+    resetPassword
 };

@@ -60,7 +60,17 @@ const userSchema = new mongoose.Schema({
   twoFactorEnabled: {
     type: Boolean,
     default: false
-  }
+  },
+  resetPasswordToken: String,
+  resetPasswordExpires: Date,
+  mutedChats: [{
+    chatId: mongoose.Schema.Types.ObjectId,
+    chatType: { type: String, enum: ['private', 'group'] }
+  }],
+  blockedUsers: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User'
+  }]
 }, {
   timestamps: true,
   toJSON: { virtuals: true },

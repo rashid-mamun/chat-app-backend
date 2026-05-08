@@ -3,13 +3,15 @@ const router = express.Router();
 const { registerValidator, loginValidator } = require('../validators/authValidator');
 const { authMiddleware } = require('../middleware/auth');
 const { rateLimiters } = require('../middleware/rateLimiter');
-const { register, login, logout, refreshToken, setup2FA, verify2FA, getProfile, updateProfile, changePassword } = require('../controllers/authController');
+const { register, login, logout, refreshToken, setup2FA, verify2FA, getProfile, updateProfile, changePassword, forgotPassword, resetPassword } = require('../controllers/authController');
 
 // Authentication routes
 router.post('/register', rateLimiters.auth, registerValidator, register);
 router.post('/login', rateLimiters.auth, loginValidator, login);
 router.post('/logout', authMiddleware, logout);
 router.post('/refresh-token', refreshToken);
+router.post('/forgot-password', rateLimiters.auth, forgotPassword);
+router.post('/reset-password/:token', rateLimiters.auth, resetPassword);
 
 // 2FA routes
 router.post('/2fa/setup', authMiddleware, setup2FA);
