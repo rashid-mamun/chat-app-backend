@@ -111,7 +111,11 @@ const getUserChats = async (userId) => {
             return {
                 _id: otherUser._id,
                 user: otherUser,
-                lastMessage: msg.content
+                lastMessage: {
+                    content: msg.content,
+                    createdAt: msg.createdAt,
+                    sender: msg.sender
+                }
             };
         });
 

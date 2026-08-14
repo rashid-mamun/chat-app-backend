@@ -7,22 +7,43 @@ const logger = require('../utils/logger');
 const createGroup = async (req, res, next) => {
     try {
         const { name, members, privacy } = req.body;
+
+        // Name is always required
+        if (!name) {
+            throw new AppError('Group name and members array are required', 400);
+        }
+
+        // members must be an array if provided; if missing entirely also 400
+        if (!members || !Array.isArray(members)) {
+            throw new AppError('Group name and members array are required', 400);
+        }
+
+        // Validate member IDs only when the array has entries
+        if (members.length > 0) {
+            // Validate ObjectId format first
+            const invalidIds = members.filter(id => !mongoose.Types.ObjectId.isValid(id));
+            if (invalidIds.length > 0) {
+                throw new AppError('One or more members not found', 400);
+            }
+
+            const memberDocs = await User.find({ _id: { $in: members } });
+            if (memberDocs.length !== members.length) {
+                throw new AppError('One or more members not found', 400);
+            }
+        }
+
         const inviteCode = Math.random().toString(36).substring(2, 10).toUpperCase();
+
+        // Add creator first, then provided members (dedup in case creator is in the list)
+        const allMemberIds = [req.user._id, ...members.filter(id => id.toString() !== req.user._id.toString())];
 
         const group = new Group({
             name,
-            members: [req.user._id], // Start with just the creator, others must accept invites
+            members: allMemberIds,
             admins: [req.user._id],
             privacy: privacy || 'public',
             inviteCode
         });
-
-        // If members provided, send invites instead of adding directly
-        if (members && members.length > 0) {
-            members.forEach(memberId => {
-                group.invites.push({ user: memberId, inviter: req.user._id });
-            });
-        }
 
         await group.save();
 
@@ -206,6 +227,43 @@ const inviteMember = async (req, res, next) => {
         res.json({
             success: true,
             message: 'Invitation sent to user'
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
+const addMember = async (req, res, next) => {
+    try {
+        const { groupId } = req.params;
+        const { memberId } = req.body;
+
+        const group = await Group.findById(groupId);
+        if (!group) {
+            throw new AppError('Group not found', 404);
+        }
+
+        if (!group.admins.some(admin => admin.toString() === req.user._id.toString())) {
+            throw new AppError('Only group admins can add members', 403);
+        }
+
+        const userExists = await User.findById(memberId);
+        if (!userExists) {
+            throw new AppError('User not found', 404);
+        }
+
+        if (group.members.some(member => member.toString() === memberId)) {
+            throw new AppError('User is already a member of this group', 400);
+        }
+
+        group.members.push(memberId);
+        await group.save();
+        await group.populate('members', 'username email avatar isOnline status lastSeen');
+
+        res.json({
+            success: true,
+            message: 'Member added successfully',
+            data: group
         });
     } catch (error) {
         next(error);
@@ -515,6 +573,7 @@ module.exports = {
     handleJoinRequest,
     handleInviteResponse,
     leaveGroup,
+    addMember,
     removeMember,
     addAdmin,
     removeAdmin,

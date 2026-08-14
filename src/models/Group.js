@@ -26,7 +26,8 @@ const groupSchema = new mongoose.Schema({
     },
     inviteCode: {
         type: String,
-        unique: true
+        unique: true,
+        sparse: true
     },
     joinRequests: [{
         user: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },

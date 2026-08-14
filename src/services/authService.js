@@ -41,7 +41,7 @@ const register = async ({ username, email, password }) => {
             EX: 7 * 24 * 60 * 60 // 7 days in seconds
         });
 
-        return { user: { _id: user._id, username, email }, tokens };
+        return { user: { id: user._id.toString(), _id: user._id, username, email }, tokens };
     } catch (error) {
         logger.error('Error registering user:', error);
 

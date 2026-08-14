@@ -3,33 +3,24 @@ const logger = require('../utils/logger');
 
 const connectDB = async () => {
     try {
-        const conn = await mongoose.connect(process.env.MONGO_URI, {
+        let mongoUri = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/chatapp';
+
+        // Prefer IPv4 127.0.0.1 to avoid ECONNREFUSED on Windows IPv6 ::1
+        if (mongoUri.includes('localhost')) {
+            mongoUri = mongoUri.replace('localhost', '127.0.0.1');
+        }
+
+        const conn = await mongoose.connect(mongoUri, {
             useNewUrlParser: true,
             useUnifiedTopology: true,
-            maxPoolSize: 10,
-            serverSelectionTimeoutMS: 5000,
-            socketTimeoutMS: 45000,
+            serverSelectionTimeoutMS: 5000
         });
 
-        logger.info(`MongoDB Connected: ${conn.connection.host}`);
-
-        mongoose.connection.on('error', (err) => {
-            logger.error('MongoDB connection error:', err);
-        });
-
-        mongoose.connection.on('disconnected', () => {
-            logger.warn('MongoDB disconnected');
-        });
-
-        process.on('SIGINT', async () => {
-            await mongoose.connection.close();
-            logger.info('MongoDB connection closed due to app termination');
-            process.exit(0);
-        });
-
+        logger.info(`MongoDB Connected: ${conn.connection.host}/${conn.connection.name}`);
+        return conn;
     } catch (error) {
-        logger.error('MongoDB connection failed:', error);
-        process.exit(1);
+        logger.error(`Error connecting to MongoDB: ${error.message}`);
+        throw error;
     }
 };
 
