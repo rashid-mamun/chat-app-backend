@@ -12,6 +12,7 @@ const {
     handleJoinRequest,
     handleInviteResponse,
     leaveGroup,
+    addMember,
     removeMember,
     addAdmin,
     removeAdmin,
@@ -40,6 +41,7 @@ router.delete('/:groupId', authMiddleware, deleteGroup);
 
 // Group member management
 router.post('/:groupId/invite', authMiddleware, inviteMember);
+router.post('/:groupId/members', authMiddleware, addMember);
 router.post('/:groupId/leave', authMiddleware, leaveGroup);
 router.delete('/:groupId/members/:memberId', authMiddleware, removeMember);
 
