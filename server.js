@@ -45,7 +45,7 @@ app.use(express.urlencoded({ extended: true, limit: '1mb' }));
 app.use(cookieParser());
 securityMiddleware(app);
 
-// Render disks should set UPLOAD_PATH=/var/data/uploads.
+// Render mounts its persistent upload disk directly at /app/uploads.
 const uploadPath = path.resolve(process.env.UPLOAD_PATH || path.join(__dirname, 'uploads'));
 require('fs').mkdirSync(uploadPath, { recursive: true });
 app.use('/uploads', express.static(uploadPath, {

@@ -28,6 +28,6 @@ With `QUEUE_DRIVER=auto`, Redis/BullMQ is preferred, RabbitMQ is second, and
 jobs run immediately in-process when neither broker URL exists. In-process mode
 is not durable.
 
-The Blueprint mounts a persistent disk at `/var/data`; uploads use
-`/var/data/uploads`. After deployment, verify `/api/v1/health`, login, token
+The Blueprint mounts a persistent disk directly at `/app/uploads`. After
+deployment, verify `/api/v1/health`, login, token
 refresh, Socket.IO messaging, uploads, and password-reset email delivery.

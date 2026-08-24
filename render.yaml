@@ -31,7 +31,7 @@ services:
       - key: ALLOWED_FILE_TYPES
         value: jpeg,jpg,png,gif,pdf,doc,docx,txt,plain
       - key: UPLOAD_PATH
-        value: /var/data/uploads
+        value: /app/uploads
       - key: MONGO_URI
         sync: false
       - key: REDIS_URL
@@ -50,5 +50,5 @@ services:
         sync: false
     disk:
       name: uploads
-      mountPath: /var/data
+      mountPath: /app/uploads
       sizeGB: 1

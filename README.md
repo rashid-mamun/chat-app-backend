@@ -83,7 +83,7 @@ This repository includes [render.yaml](render.yaml) and a production
 provide the secret environment values requested by the Blueprint. The default
 deployment uses `QUEUE_DRIVER=bullmq`, so it requires a managed `REDIS_URL`.
 
-Uploads use the persistent disk path `/var/data/uploads`. See
+Uploads use the persistent disk path `/app/uploads`. See
 [DEPLOYMENT.md](DEPLOYMENT.md) for Render configuration and RabbitMQ switching.
 
 Do not commit `.env`, credentials, reset tokens, or generated uploads.
