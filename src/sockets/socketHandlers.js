@@ -52,10 +52,12 @@ const setupSocket = async (io) => {
         try {
             logger.info(`User connected: ${socket.user.username} (${socket.userId})`);
 
-            await User.findByIdAndUpdate(socket.userId, {
+            // Do not block listener registration on a presence write. Clients can
+            // emit room-join events immediately after their `connect` event.
+            User.findByIdAndUpdate(socket.userId, {
                 isOnline: true,
                 lastSeen: new Date()
-            });
+            }).catch((error) => logger.warn(`Failed to update online status: ${error.message}`));
 
             // Broadcast online status
             socket.broadcast.emit('userStatusChanged', {
@@ -111,7 +113,7 @@ const setupSocket = async (io) => {
                     const { recipientId, content, fileUrl, fileName, fileType, fileSize, replyTo, isForwarded } = data;
 
                     if (!recipientId || (!content?.trim() && !fileUrl)) {
-                        socket.emit('error', { message: 'Recipient and content or file are required' });
+                        socket.emit('error', { message: 'Recipient ID and content are required' });
                         return;
                     }
 

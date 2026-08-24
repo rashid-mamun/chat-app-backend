@@ -77,9 +77,7 @@ const userSchema = new mongoose.Schema({
   toObject: { virtuals: true }
 });
 
-// Indexes for better performance
-userSchema.index({ email: 1 });
-userSchema.index({ username: 1 });
+// Additional query index (unique fields already create their own indexes).
 userSchema.index({ status: 1 });
 
 // Virtual for user's full profile

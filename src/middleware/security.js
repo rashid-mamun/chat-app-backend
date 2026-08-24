@@ -5,6 +5,9 @@ const xss = require('xss-clean');
 const hpp = require('hpp');
 
 const securityMiddleware = (app) => {
+    const allowedOrigins = (process.env.ALLOWED_ORIGINS || 'http://localhost:3000,http://localhost:5173')
+        .split(',')
+        .map((origin) => origin.trim());
     app.use(helmet({
         contentSecurityPolicy: {
             directives: {
@@ -18,7 +21,10 @@ const securityMiddleware = (app) => {
     }));
 
     app.use(cors({
-        origin: process.env.ALLOWED_ORIGINS?.split(',') || ['http://localhost:3000', 'http://localhost:5173'],
+        origin(origin, callback) {
+            if (!origin || allowedOrigins.includes(origin)) return callback(null, true);
+            return callback(new Error('Origin is not allowed by CORS'));
+        },
         credentials: true,
         methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
         allowedHeaders: ['Content-Type', 'Authorization']

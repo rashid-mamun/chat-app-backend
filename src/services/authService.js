@@ -7,6 +7,7 @@ const { redisClient } = require('../config/redis');
 const { AppError } = require('../middleware/errorHandler');
 const logger = require('../utils/logger');
 const mongoose = require('mongoose');
+const { enqueue } = require('./queueService');
 
 const generateTokens = (user) => {
     if (!process.env.JWT_SECRET || !process.env.JWT_REFRESH_SECRET) {
@@ -323,10 +324,8 @@ const forgotPassword = async (email) => {
         user.resetPasswordExpires = Date.now() + 15 * 60 * 1000; // 15 mins
         await user.save({ validateBeforeSave: false });
 
-        const resetUrl = `http://localhost:5173/reset-password/${resetToken}`;
-
-        // Mock sending email
-        logger.info(`[MOCK EMAIL] Password Reset Link for ${email}: ${resetUrl}`);
+        const resetUrl = `${process.env.FRONTEND_URL}/reset-password/${resetToken}`;
+        await enqueue('password-reset-email', { email: user.email, resetUrl });
 
         return { message: 'If an account with that email exists, we sent a password reset link.' };
     } catch (error) {

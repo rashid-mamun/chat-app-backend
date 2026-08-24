@@ -8,9 +8,9 @@ const logger = require('../utils/logger');
 const router = express.Router();
 
 // Ensure upload directory exists
-const uploadDir = 'uploads';
+const uploadDir = path.resolve(process.env.UPLOAD_PATH || 'uploads');
 if (!fs.existsSync(uploadDir)) {
-    fs.mkdirSync(uploadDir);
+    fs.mkdirSync(uploadDir, { recursive: true });
 }
 
 // Storage configuration
@@ -26,16 +26,9 @@ const storage = multer.diskStorage({
 
 // File filter
 const fileFilter = (req, file, cb) => {
-    // Accept images, docs, etc.
+    // Keep browser-served uploads to formats with a narrow attack surface.
     const allowedTypes = [
-        'image/jpeg', 'image/png', 'image/gif', 'image/webp',
-        'application/pdf', 'application/msword', 
-        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-        'application/vnd.ms-excel',
-        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        'application/vnd.ms-powerpoint',
-        'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-        'text/plain', 'application/zip', 'application/x-zip-compressed'
+        'image/jpeg', 'image/png', 'image/gif', 'image/webp', 'application/pdf'
     ];
     
     if (allowedTypes.includes(file.mimetype)) {

@@ -10,11 +10,7 @@ const connectDB = async () => {
             mongoUri = mongoUri.replace('localhost', '127.0.0.1');
         }
 
-        const conn = await mongoose.connect(mongoUri, {
-            useNewUrlParser: true,
-            useUnifiedTopology: true,
-            serverSelectionTimeoutMS: 5000
-        });
+        const conn = await mongoose.connect(mongoUri, { serverSelectionTimeoutMS: 5000 });
 
         logger.info(`MongoDB Connected: ${conn.connection.host}/${conn.connection.name}`);
         return conn;

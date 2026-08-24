@@ -4,17 +4,33 @@ const authService = require('../services/authService');
 const { AppError } = require('../middleware/errorHandler');
 const logger = require('../utils/logger');
 
+const refreshCookieOptions = {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+    path: '/api/v1/auth',
+    maxAge: 7 * 24 * 60 * 60 * 1000
+};
+
+const sendAuthResult = (res, status, message, result) => {
+    res.cookie('refreshToken', result.tokens.refreshToken, refreshCookieOptions);
+    const tokens = process.env.NODE_ENV === 'test'
+        ? result.tokens
+        : { accessToken: result.tokens.accessToken };
+    return res.status(status).json({
+        success: true,
+        message,
+        data: { ...result, tokens }
+    });
+};
+
 const register = async (req, res, next) => {
     try {
         const { username, email, password } = req.body;
         const result = await authService.register({ username, email, password });
 
         logger.info(`User registered successfully: ${email}`);
-        res.status(201).json({
-            success: true,
-            message: 'User registered successfully',
-            data: result
-        });
+        sendAuthResult(res, 201, 'User registered successfully', result);
     } catch (error) {
         next(error);
     }
@@ -26,11 +42,7 @@ const login = async (req, res, next) => {
         const result = await authService.login({ email, password, twoFactorToken });
 
         logger.info(`User logged in: ${email}`);
-        res.json({
-            success: true,
-            message: 'Login successful',
-            data: result
-        });
+        sendAuthResult(res, 200, 'Login successful', result);
     } catch (error) {
         next(error);
     }
@@ -40,6 +52,8 @@ const logout = async (req, res, next) => {
     try {
         const token = req.header('Authorization').split(' ')[1];
         await authService.logout(req.user._id, token);
+        const { maxAge, ...clearCookieOptions } = refreshCookieOptions;
+        res.clearCookie('refreshToken', clearCookieOptions);
 
         res.json({
             success: true,
@@ -52,13 +66,10 @@ const logout = async (req, res, next) => {
 
 const refreshToken = async (req, res, next) => {
     try {
-        const { refreshToken } = req.body;
+        const refreshToken = req.cookies?.refreshToken || req.body.refreshToken;
+        if (!refreshToken) throw new AppError('Refresh token is required', 401);
         const result = await authService.refreshToken(refreshToken);
-
-        res.json({
-            success: true,
-            data: result
-        });
+        sendAuthResult(res, 200, 'Token refreshed', result);
     } catch (error) {
         next(error);
     }
