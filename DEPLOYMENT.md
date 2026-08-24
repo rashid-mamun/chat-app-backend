@@ -10,7 +10,12 @@ QUEUE_DRIVER=bullmq
 REDIS_URL=rediss://username:password@redis-host:6379
 FRONTEND_URL=https://your-frontend.vercel.app
 ALLOWED_ORIGINS=https://your-frontend.vercel.app
+RESEND_API_KEY=re_your_api_key
+MAIL_FROM=ChatApp <no-reply@your-verified-domain.com>
 ```
+
+`MAIL_FROM` must use a sending domain verified in your Resend account. Keep the
+API key only in Render's environment settings; never commit it to the repository.
 
 To switch to RabbitMQ later, set:
 

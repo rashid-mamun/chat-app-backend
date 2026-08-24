@@ -4,9 +4,7 @@ const requiredInProduction = [
     'JWT_REFRESH_SECRET',
     'ALLOWED_ORIGINS',
     'FRONTEND_URL',
-    'SMTP_HOST',
-    'SMTP_USER',
-    'SMTP_PASS',
+    'RESEND_API_KEY',
     'MAIL_FROM'
 ];
 

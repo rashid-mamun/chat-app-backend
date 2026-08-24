@@ -24,7 +24,7 @@ cp .env.example .env
 ```
 
 For local development, change `.env` to development URLs and provide MongoDB,
-Redis, JWT, and SMTP settings. Start the API with:
+Redis, JWT, and Resend settings. Start the API with:
 
 ```sh
 npm run dev
