@@ -1,0 +1,48 @@
+services:
+  - type: web
+    name: chat-app-backend
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /api/v1/health
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: API_VERSION
+        value: v1
+      - key: QUEUE_DRIVER
+        value: bullmq
+      - key: QUEUE_CONCURRENCY
+        value: "5"
+      - key: QUEUE_STRICT
+        value: "false"
+      - key: UPLOAD_PATH
+        value: /var/data/uploads
+      - key: MONGO_URI
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: JWT_REFRESH_SECRET
+        generateValue: true
+      - key: FRONTEND_URL
+        sync: false
+      - key: ALLOWED_ORIGINS
+        sync: false
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_PORT
+        value: "587"
+      - key: SMTP_SECURE
+        value: "false"
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASS
+        sync: false
+      - key: MAIL_FROM
+        sync: false
+    disk:
+      name: uploads
+      mountPath: /var/data
+      sizeGB: 1

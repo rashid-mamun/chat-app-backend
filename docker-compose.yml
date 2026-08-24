@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   app:
     build: .
@@ -7,11 +5,17 @@ services:
       - "5000:5000"
     environment:
       - PORT=5000
+      - NODE_ENV=production
       - MONGO_URI=mongodb://mongo:27017/chat-app
-      - JWT_SECRET=your_jwt_secret_key
-      - JWT_REFRESH_SECRET=your_jwt_refresh_secret_key
+      - JWT_SECRET=${JWT_SECRET:?JWT_SECRET is required}
+      - JWT_REFRESH_SECRET=${JWT_REFRESH_SECRET:?JWT_REFRESH_SECRET is required}
       - REDIS_URL=redis://redis:6379
-      - ALLOWED_ORIGINS=http://localhost:3000,http://localhost:5173
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:?ALLOWED_ORIGINS is required}
+      - FRONTEND_URL=${FRONTEND_URL:?FRONTEND_URL is required}
+      - SMTP_HOST=${SMTP_HOST:?SMTP_HOST is required}
+      - SMTP_USER=${SMTP_USER:?SMTP_USER is required}
+      - SMTP_PASS=${SMTP_PASS:?SMTP_PASS is required}
+      - MAIL_FROM=${MAIL_FROM:?MAIL_FROM is required}
     volumes:
       - ./uploads:/app/uploads
     depends_on:
@@ -21,18 +25,18 @@ services:
       - chat-network
 
   mongo:
-    image: mongo:latest
+    image: mongo:7.0
     ports:
-      - "27017:27017"
+      - "127.0.0.1:27017:27017"
     volumes:
       - mongo-data:/data/db
     networks:
       - chat-network
 
   redis:
-    image: redis:latest
+    image: redis:7.4-alpine
     ports:
-      - "6378:6379"
+      - "127.0.0.1:6378:6379"
     networks:
       - chat-network
 
