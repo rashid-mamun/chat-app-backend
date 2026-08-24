@@ -10,12 +10,26 @@ services:
         value: production
       - key: API_VERSION
         value: v1
+      - key: BACKEND_URL
+        sync: false
       - key: QUEUE_DRIVER
         value: bullmq
       - key: QUEUE_CONCURRENCY
         value: "5"
       - key: QUEUE_STRICT
         value: "false"
+      - key: USE_MEMORY_REDIS
+        value: "false"
+      - key: JWT_EXPIRE
+        value: 15m
+      - key: JWT_REFRESH_EXPIRE
+        value: 7d
+      - key: LOG_LEVEL
+        value: info
+      - key: MAX_FILE_SIZE
+        value: "10485760"
+      - key: ALLOWED_FILE_TYPES
+        value: jpeg,jpg,png,gif,pdf,doc,docx,txt,plain
       - key: UPLOAD_PATH
         value: /var/data/uploads
       - key: MONGO_URI
