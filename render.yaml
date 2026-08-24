@@ -29,7 +29,7 @@ services:
       - key: MAX_FILE_SIZE
         value: "10485760"
       - key: ALLOWED_FILE_TYPES
-        value: jpeg,jpg,png,gif,pdf,doc,docx,txt,plain
+        value: jpeg,jpg,png,gif,webp,pdf,txt,plain,webm,ogg,mpeg,mp3,wav,mp4
       - key: UPLOAD_PATH
         value: /app/uploads
       - key: MONGO_URI
