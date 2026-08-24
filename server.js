@@ -58,6 +58,17 @@ app.use('/uploads', express.static(uploadPath, {
 }));
 
 // Routes
+app.get('/', (req, res) => {
+    const apiVersion = process.env.API_VERSION || 'v1';
+
+    res.status(200).json({
+        name: 'ChatApp API',
+        status: 'running',
+        version: apiVersion,
+        health: `/api/${apiVersion}/health`
+    });
+});
+
 app.use(`/api/${process.env.API_VERSION || 'v1'}/auth`, authRoutes);
 app.use(`/api/${process.env.API_VERSION || 'v1'}/chat`, chatRoutes);
 app.use(`/api/${process.env.API_VERSION || 'v1'}/group`, groupRoutes);

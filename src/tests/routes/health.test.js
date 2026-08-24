@@ -2,6 +2,21 @@ const request = require('supertest');
 const app = require('../../../server');
 
 describe('Health Routes', () => {
+    describe('GET /', () => {
+        it('should describe the running API', async () => {
+            const response = await request(app)
+                .get('/')
+                .expect(200);
+
+            expect(response.body).toEqual({
+                name: 'ChatApp API',
+                status: 'running',
+                version: 'v1',
+                health: '/api/v1/health'
+            });
+        });
+    });
+
     describe('GET /api/v1/health', () => {
         it('should return healthy status when all services are connected', async () => {
             const response = await request(app)
@@ -17,4 +32,4 @@ describe('Health Routes', () => {
             expect(response.body.services.redis.status).toBe('connected');
         });
     });
-}); 
+});
