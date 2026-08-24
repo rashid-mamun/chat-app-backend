@@ -10,6 +10,18 @@ const util = require('util');
 const compress = util.promisify(zlib.deflate);
 const decompress = util.promisify(zlib.inflate);
 
+const sanitizePoll = (poll) => {
+    if (!poll) return undefined;
+    const question = String(poll.question || '').trim();
+    const options = (poll.options || [])
+        .map(option => String(option.text || '').trim())
+        .filter(Boolean)
+        .slice(0, 6)
+        .map(text => ({ text, votes: [] }));
+    if (!question || question.length > 200 || options.length < 2) return null;
+    return { question, options };
+};
+
 const setupSocket = async (io) => {
     if (process.env.NODE_ENV !== 'test') {
         try {
@@ -110,12 +122,14 @@ const setupSocket = async (io) => {
 
             socket.on('sendPrivateMessage', async (data) => {
                 try {
-                    const { recipientId, content, fileUrl, fileName, fileType, fileSize, replyTo, isForwarded } = data;
+                    const { recipientId, content, fileUrl, fileName, fileType, fileSize, replyTo, isForwarded, poll, clientId } = data;
+                    const safePoll = sanitizePoll(poll);
 
-                    if (!recipientId || (!content?.trim() && !fileUrl)) {
+                    if (!recipientId || (!content?.trim() && !fileUrl && !poll?.question)) {
                         socket.emit('error', { message: 'Recipient ID and content are required' });
                         return;
                     }
+                    if (poll && !safePoll) return socket.emit('error', { message: 'Poll requires a question and 2–6 valid options' });
 
                     // Check if either user has blocked the other
                     const recipient = await User.findById(recipientId);
@@ -146,7 +160,8 @@ const setupSocket = async (io) => {
                         chatType: 'private',
                         isCompressed: originalPrivateLength > 1000,
                         replyTo,
-                        isForwarded
+                        isForwarded,
+                        poll: safePoll
                     });
 
                     await message.save();
@@ -166,9 +181,10 @@ const setupSocket = async (io) => {
                     }
 
                     const room = [socket.userId, recipientId].sort().join('-');
-                    io.to(room).emit('newPrivateMessage', message);
-                    io.to(`user:${recipientId}`).emit('newPrivateMessage', message);
-                    io.to(`user:${socket.userId}`).emit('newPrivateMessage', message);
+                    const outgoingMessage = { ...message.toObject(), clientId };
+                    io.to(room).emit('newPrivateMessage', outgoingMessage);
+                    io.to(`user:${recipientId}`).emit('newPrivateMessage', outgoingMessage);
+                    io.to(`user:${socket.userId}`).emit('newPrivateMessage', outgoingMessage);
 
                     logger.info(`Private message sent from ${socket.userId} to ${recipientId} in room ${room}`);
                 } catch (error) {
@@ -179,12 +195,14 @@ const setupSocket = async (io) => {
 
             socket.on('sendGroupMessage', async (data) => {
                 try {
-                    const { groupId, content, fileUrl, fileName, fileType, fileSize, replyTo, isForwarded } = data;
+                    const { groupId, content, fileUrl, fileName, fileType, fileSize, replyTo, isForwarded, poll, clientId } = data;
+                    const safePoll = sanitizePoll(poll);
 
-                    if (!groupId || (!content?.trim() && !fileUrl)) {
+                    if (!groupId || (!content?.trim() && !fileUrl && !poll?.question)) {
                         socket.emit('error', { message: 'Group ID and content/file are required' });
                         return;
                     }
+                    if (poll && !safePoll) return socket.emit('error', { message: 'Poll requires a question and 2–6 valid options' });
 
                     const originalGroupLength = content?.length || 0;
                     let processedContent = content?.trim() || '';
@@ -209,7 +227,8 @@ const setupSocket = async (io) => {
                         chatType: 'group',
                         isCompressed: originalGroupLength > 1000,
                         replyTo,
-                        isForwarded
+                        isForwarded,
+                        poll: safePoll
                     });
 
                     await message.save();
@@ -228,7 +247,7 @@ const setupSocket = async (io) => {
                         }
                     }
 
-                    io.to(`group:${groupId}`).emit('newGroupMessage', message);
+                    io.to(`group:${groupId}`).emit('newGroupMessage', { ...message.toObject(), clientId });
 
                     logger.info(`Group message sent from ${socket.userId} to group ${groupId}`);
                 } catch (error) {
@@ -317,6 +336,43 @@ const setupSocket = async (io) => {
                     logger.info(`Reaction ${reaction} on message ${messageId} by ${socket.userId}`);
                 } catch (error) {
                     logger.error('Error adding reaction:', error);
+                }
+            });
+
+            socket.on('votePoll', async ({ messageId, optionIndex }) => {
+                try {
+                    const message = await Message.findById(messageId);
+                    if (!message?.poll?.question || !message.poll.options?.[optionIndex]) {
+                        return socket.emit('error', { message: 'Poll option not found' });
+                    }
+                    if (message.poll.closesAt && message.poll.closesAt < new Date()) {
+                        return socket.emit('error', { message: 'This poll is closed' });
+                    }
+
+                    if (message.chatType === 'private') {
+                        const participants = [message.sender, message.recipient].map(String);
+                        if (!participants.includes(String(socket.userId))) return socket.emit('error', { message: 'Access denied' });
+                    } else {
+                        const group = await Group.findOne({ _id: message.group, members: socket.userId });
+                        if (!group) return socket.emit('error', { message: 'Access denied' });
+                    }
+
+                    message.poll.options.forEach(option => {
+                        option.votes = option.votes.filter(userId => String(userId) !== String(socket.userId));
+                    });
+                    message.poll.options[optionIndex].votes.push(socket.userId);
+                    await message.save();
+
+                    const payload = { messageId, poll: message.poll };
+                    if (message.chatType === 'private') {
+                        const room = [message.sender.toString(), message.recipient.toString()].sort().join('-');
+                        io.to(room).to(`user:${message.sender}`).to(`user:${message.recipient}`).emit('pollUpdated', payload);
+                    } else {
+                        io.to(`group:${message.group}`).emit('pollUpdated', payload);
+                    }
+                } catch (error) {
+                    logger.error('Poll vote failed:', error);
+                    socket.emit('error', { message: 'Unable to record vote' });
                 }
             });
 

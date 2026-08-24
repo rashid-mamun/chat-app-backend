@@ -1,4 +1,13 @@
-const { getPrivateMessages, getGroupMessages, getUserChats, searchMessages, searchMessagesAdvanced, clearChat } = require('../services/chatService');
+const {
+    getPrivateMessages,
+    getGroupMessages,
+    getUserChats,
+    searchMessages,
+    searchMessagesAdvanced,
+    clearChat,
+    markChatAsRead,
+    updateConversationPreferences
+} = require('../services/chatService');
 const { AppError } = require('../middleware/errorHandler');
 const Message = require('../models/Message');
 const Group = require('../models/Group');
@@ -103,25 +112,64 @@ const pinMessage = async (req, res, next) => {
             throw new AppError('Access denied', 403);
         }
 
-        message.isPinned = true;
-        message.pinnedBy = req.user._id;
-        message.pinnedAt = new Date();
+        message.isPinned = !message.isPinned;
+        message.pinnedBy = message.isPinned ? req.user._id : undefined;
+        message.pinnedAt = message.isPinned ? new Date() : undefined;
         await message.save();
 
         const targetRoom = message.chatType === 'private'
             ? [message.sender.toString(), message.recipient.toString()].sort().join('-')
             : `group:${message.group}`;
 
-        req.app.locals.io.to(targetRoom).emit('messagePinned', {
+        req.app.locals.io.to(targetRoom).emit('messagePinUpdated', {
             messageId,
+            isPinned: message.isPinned,
             pinnedBy: req.user._id,
             pinnedAt: message.pinnedAt
         });
 
         res.json({
             success: true,
-            message: 'Message pinned successfully'
+            message: message.isPinned ? 'Message pinned successfully' : 'Message unpinned successfully',
+            data: message
         });
+    } catch (error) {
+        next(error);
+    }
+};
+
+const markChatReadController = async (req, res, next) => {
+    try {
+        const { chatType, chatId } = req.body;
+        if (!['private', 'group'].includes(chatType) || !chatId) {
+            throw new AppError('Valid chatType and chatId are required', 400);
+        }
+
+        const result = await markChatAsRead(req.user._id, chatType, chatId);
+        const targetRoom = chatType === 'private'
+            ? [req.user._id.toString(), chatId.toString()].sort().join('-')
+            : `group:${chatId}`;
+        req.app.locals.io.to(targetRoom).emit('chatRead', {
+            chatType,
+            chatId,
+            userId: req.user._id,
+            readAt: result.readAt
+        });
+
+        res.json({ success: true, data: result });
+    } catch (error) {
+        next(error);
+    }
+};
+
+const updateConversationPreferencesController = async (req, res, next) => {
+    try {
+        const { chatType, chatId } = req.params;
+        if (!['private', 'group'].includes(chatType)) {
+            throw new AppError('Invalid chat type', 400);
+        }
+        const preferences = await updateConversationPreferences(req.user._id, chatType, chatId, req.body);
+        res.json({ success: true, data: preferences });
     } catch (error) {
         next(error);
     }
@@ -263,5 +311,7 @@ module.exports = {
     deleteMessage,
     editMessage,
     uploadFile,
-    clearChatController
+    clearChatController,
+    markChatReadController,
+    updateConversationPreferencesController
 };

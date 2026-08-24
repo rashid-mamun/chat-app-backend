@@ -750,4 +750,55 @@ describe('Chat Controller', () => {
             expect(response.body.data.messages).toHaveLength(2);
         });
     });
+
+    describe('Conversation state', () => {
+        it('marks all incoming private messages as read', async () => {
+            const messages = await Message.create([
+                { sender: user2._id, recipient: user1._id, content: 'Unread one', chatType: 'private' },
+                { sender: user2._id, recipient: user1._id, content: 'Unread two', chatType: 'private' }
+            ]);
+
+            const response = await request(app)
+                .post('/api/v1/chat/read')
+                .set('Authorization', `Bearer ${accessToken1}`)
+                .send({ chatType: 'private', chatId: user2._id.toString() })
+                .expect(200);
+
+            expect(response.body.data.modifiedCount).toBe(2);
+            const updated = await Message.find({ _id: { $in: messages.map(message => message._id) } });
+            expect(updated.every(message => message.readBy.some(read => read.user.equals(user1._id)))).toBe(true);
+        });
+
+        it('stores pin, archive, unread, and draft preferences per user', async () => {
+            const response = await request(app)
+                .patch(`/api/v1/chat/preferences/private/${user2._id}`)
+                .set('Authorization', `Bearer ${accessToken1}`)
+                .send({ isPinned: true, isArchived: true, markedUnread: true, draft: 'Finish this later' })
+                .expect(200);
+
+            expect(response.body.data).toEqual(expect.objectContaining({
+                isPinned: true,
+                isArchived: true,
+                markedUnread: true,
+                draft: 'Finish this later'
+            }));
+        });
+
+        it('returns real unread counts in the conversation list', async () => {
+            await Message.create({
+                sender: user2._id,
+                recipient: user1._id,
+                content: 'Unread message',
+                chatType: 'private'
+            });
+
+            const response = await request(app)
+                .get('/api/v1/chat/user')
+                .set('Authorization', `Bearer ${accessToken1}`)
+                .expect(200);
+
+            const chat = response.body.data.privateChats.find(item => item._id === user2._id.toString());
+            expect(chat.unreadCount).toBe(1);
+        });
+    });
 });

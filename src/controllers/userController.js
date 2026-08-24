@@ -1,4 +1,7 @@
 const User = require('../models/User');
+const Message = require('../models/Message');
+const Group = require('../models/Group');
+const Report = require('../models/Report');
 const { AppError } = require('../middleware/errorHandler');
 
 const searchUsers = async (req, res, next) => {
@@ -103,9 +106,76 @@ const toggleBlockUser = async (req, res, next) => {
     }
 };
 
+const canAccessMessage = async (userId, message) => {
+    if (message.chatType === 'private') {
+        return [message.sender, message.recipient].some(id => String(id) === String(userId));
+    }
+    return Boolean(await Group.exists({ _id: message.group, members: userId }));
+};
+
+const toggleSavedMessage = async (req, res, next) => {
+    try {
+        const { messageId } = req.body;
+        const message = await Message.findById(messageId);
+        if (!message || !(await canAccessMessage(req.user._id, message))) {
+            throw new AppError('Message not found', 404);
+        }
+
+        const user = await User.findById(req.user._id);
+        const index = user.savedMessages.findIndex(id => String(id) === String(messageId));
+        const isSaved = index === -1;
+        if (isSaved) user.savedMessages.push(messageId);
+        else user.savedMessages.splice(index, 1);
+        await user.save();
+        res.json({ success: true, data: { isSaved } });
+    } catch (error) {
+        next(error);
+    }
+};
+
+const getSavedMessages = async (req, res, next) => {
+    try {
+        const user = await User.findById(req.user._id).populate({
+            path: 'savedMessages',
+            match: { isDeleted: { $ne: true } },
+            populate: { path: 'sender', select: 'username avatar' },
+            options: { sort: { createdAt: -1 } }
+        });
+        res.json({ success: true, data: user.savedMessages });
+    } catch (error) {
+        next(error);
+    }
+};
+
+const reportMessage = async (req, res, next) => {
+    try {
+        const { messageId, reason, details = '' } = req.body;
+        const message = await Message.findById(messageId);
+        if (!message || !(await canAccessMessage(req.user._id, message))) {
+            throw new AppError('Message not found', 404);
+        }
+        if (String(message.sender) === String(req.user._id)) {
+            throw new AppError('You cannot report your own message', 400);
+        }
+        const report = await Report.create({
+            reporter: req.user._id,
+            reportedUser: message.sender,
+            message: message._id,
+            reason,
+            details
+        });
+        res.status(201).json({ success: true, message: 'Report submitted', data: { id: report._id } });
+    } catch (error) {
+        next(error);
+    }
+};
+
 module.exports = {
     searchUsers,
     getAllUsers,
     toggleMuteChat,
-    toggleBlockUser
+    toggleBlockUser,
+    toggleSavedMessage,
+    getSavedMessages,
+    reportMessage
 };

@@ -67,9 +67,22 @@ const userSchema = new mongoose.Schema({
     chatId: mongoose.Schema.Types.ObjectId,
     chatType: { type: String, enum: ['private', 'group'] }
   }],
+  conversationPreferences: [{
+    chatId: { type: mongoose.Schema.Types.ObjectId, required: true },
+    chatType: { type: String, enum: ['private', 'group'], required: true },
+    isPinned: { type: Boolean, default: false },
+    isArchived: { type: Boolean, default: false },
+    markedUnread: { type: Boolean, default: false },
+    draft: { type: String, maxlength: 1000, default: '' },
+    updatedAt: { type: Date, default: Date.now }
+  }],
   blockedUsers: [{
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User'
+  }],
+  savedMessages: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Message'
   }]
 }, {
   timestamps: true,

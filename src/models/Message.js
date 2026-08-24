@@ -67,6 +67,14 @@ const messageSchema = new mongoose.Schema({
         type: mongoose.Schema.Types.ObjectId,
         ref: 'Message'
     },
+    poll: {
+        question: { type: String, trim: true, maxlength: 200 },
+        options: [{
+            text: { type: String, trim: true, maxlength: 100 },
+            votes: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }]
+        }],
+        closesAt: Date
+    },
     isDeleted: {
         type: Boolean,
         default: false
@@ -117,6 +125,7 @@ messageSchema.index({ recipient: 1, createdAt: -1 });
 messageSchema.index({ group: 1, createdAt: -1 });
 messageSchema.index({ chatType: 1, createdAt: -1 });
 messageSchema.index({ sender: 1, recipient: 1, createdAt: -1 });
+messageSchema.index({ sender: 1, recipient: 1, chatType: 1, isDeleted: 1, createdAt: -1 });
 messageSchema.index({ group: 1, createdAt: -1, isDeleted: 1 });
 messageSchema.index({ content: 'text' });
 messageSchema.index({ isPinned: 1, chatType: 1 });

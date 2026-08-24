@@ -14,7 +14,9 @@ const {
     deleteMessage,
     editMessage,
     uploadFile,
-    clearChatController
+    clearChatController,
+    markChatReadController,
+    updateConversationPreferencesController
 } = require('../controllers/chatController');
 
 // Message retrieval routes
@@ -30,6 +32,8 @@ router.get('/messages/search/advanced', authMiddleware, searchMessagesAdvancedCo
 router.post('/messages/:messageId/pin', authMiddleware, pinMessageValidation, pinMessage);
 router.delete('/messages/:messageId', authMiddleware, deleteMessage);
 router.put('/messages/:messageId', authMiddleware, messageValidation, editMessage);
+router.post('/read', authMiddleware, markChatReadController);
+router.patch('/preferences/:chatType/:chatId', authMiddleware, updateConversationPreferencesController);
 router.post('/clear', authMiddleware, clearChatController);
 
 // File upload route

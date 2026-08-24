@@ -1,6 +1,7 @@
 const mongoose = require('mongoose');
 const Message = require('../models/Message');
 const Group = require('../models/Group');
+const User = require('../models/User');
 const { AppError } = require('../middleware/errorHandler');
 const logger = require('../utils/logger');
 const zlib = require('zlib');
@@ -86,49 +87,156 @@ const getGroupMessages = async (groupId, userId, page = 1, limit = 20) => {
 
 const getUserChats = async (userId) => {
     try {
-        const privateMessages = await Message.find({
-            $or: [{ sender: userId }, { recipient: userId }],
+        const objectUserId = new mongoose.Types.ObjectId(userId);
+        const privateMatch = {
+            $or: [{ sender: objectUserId }, { recipient: objectUserId }],
             chatType: 'private',
             isDeleted: { $ne: true }
-        })
-            .populate('sender', 'username')
-            .populate('recipient', 'username')
-            .sort({ createdAt: -1 })
+        };
+
+        // Only return the newest message for each private conversation. Loading every
+        // historical message here made the sidebar progressively slower as data grew.
+        const [latestPrivateMessages, unreadPrivate, user, groupChats] = await Promise.all([
+            Message.aggregate([
+                { $match: privateMatch },
+                {
+                    $addFields: {
+                        otherUser: { $cond: [{ $eq: ['$sender', objectUserId] }, '$recipient', '$sender'] }
+                    }
+                },
+                { $sort: { createdAt: -1 } },
+                { $group: { _id: '$otherUser', message: { $first: '$$ROOT' } } }
+            ]),
+            Message.aggregate([
+            {
+                $match: {
+                    recipient: objectUserId,
+                    chatType: 'private',
+                    isDeleted: { $ne: true },
+                    'readBy.user': { $ne: objectUserId }
+                }
+            },
+            { $group: { _id: '$sender', count: { $sum: 1 } } }
+            ]),
+            User.findById(userId).select('conversationPreferences').lean(),
+            Group.find({ members: userId })
+                .populate('members', 'username email avatar isOnline status lastSeen')
+                .populate('admins', 'username email avatar')
+                .lean()
+        ]);
+
+        const privateUserIds = latestPrivateMessages.map(item => item._id).filter(Boolean);
+        const privateUsers = await User.find({ _id: { $in: privateUserIds } })
+            .select('username avatar isOnline lastSeen')
             .lean();
+        const privateUserMap = new Map(privateUsers.map(item => [String(item._id), item]));
+        const privateUnreadMap = new Map(unreadPrivate.map(item => [String(item._id), item.count]));
+        const preferenceMap = new Map((user?.conversationPreferences || []).map(pref => [
+            `${pref.chatType}:${pref.chatId}`,
+            pref
+        ]));
 
-        const uniqueUsers = [...new Set(
-            privateMessages.flatMap(msg => [
-                msg.sender._id.toString(),
-                msg.recipient._id.toString()
-            ]).filter(id => id !== userId.toString())
-        )];
-
-        const privateChats = uniqueUsers.map(id => {
-            const msg = privateMessages.find(m =>
-                m.sender._id.toString() === id || m.recipient._id.toString() === id
-            );
-            const otherUser = msg.sender._id.toString() === userId.toString() ? msg.recipient : msg.sender;
-            return {
+        const privateChats = latestPrivateMessages.flatMap(({ _id, message: msg }) => {
+            const id = String(_id);
+            const otherUser = privateUserMap.get(id);
+            // A deleted account can leave historical messages behind; skip it instead
+            // of making the entire conversations endpoint fail with a null dereference.
+            if (!otherUser || !msg) return [];
+            const preferences = preferenceMap.get(`private:${id}`) || {};
+            return [{
                 _id: otherUser._id,
                 user: otherUser,
                 lastMessage: {
                     content: msg.content,
                     createdAt: msg.createdAt,
                     sender: msg.sender
-                }
-            };
+                },
+                unreadCount: privateUnreadMap.get(id) || 0,
+                preferences
+            }];
         });
 
-        const groupChats = await Group.find({ members: userId })
-            .populate('members', 'username email avatar isOnline status lastSeen')
-            .populate('admins', 'username email avatar')
-            .lean();
+        const groupIds = groupChats.map(group => group._id);
+        const [lastGroupMessages, unreadGroups] = await Promise.all([
+            Message.aggregate([
+                { $match: { group: { $in: groupIds }, chatType: 'group', isDeleted: { $ne: true } } },
+                { $sort: { createdAt: -1 } },
+                { $group: { _id: '$group', message: { $first: '$$ROOT' } } }
+            ]),
+            Message.aggregate([
+                {
+                    $match: {
+                        group: { $in: groupIds },
+                        chatType: 'group',
+                        sender: { $ne: new mongoose.Types.ObjectId(userId) },
+                        isDeleted: { $ne: true },
+                        'readBy.user': { $ne: new mongoose.Types.ObjectId(userId) }
+                    }
+                },
+                { $group: { _id: '$group', count: { $sum: 1 } } }
+            ])
+        ]);
+        const groupLastMap = new Map(lastGroupMessages.map(item => [String(item._id), item.message]));
+        const groupUnreadMap = new Map(unreadGroups.map(item => [String(item._id), item.count]));
+        const hydratedGroupChats = groupChats.map(group => ({
+            ...group,
+            lastMessage: groupLastMap.get(String(group._id)) || null,
+            unreadCount: groupUnreadMap.get(String(group._id)) || 0,
+            preferences: preferenceMap.get(`group:${group._id}`) || {}
+        }));
 
-        return { privateChats, groupChats };
+        return { privateChats, groupChats: hydratedGroupChats };
     } catch (error) {
         logger.error('Error fetching user chats:', error);
         throw new AppError('Failed to fetch user chats', 500);
     }
+};
+
+const markChatAsRead = async (userId, chatType, chatId) => {
+    const objectUserId = new mongoose.Types.ObjectId(userId);
+    const objectChatId = new mongoose.Types.ObjectId(chatId);
+    const query = chatType === 'private'
+        ? { chatType, sender: objectChatId, recipient: objectUserId, isDeleted: { $ne: true } }
+        : { chatType, group: objectChatId, sender: { $ne: objectUserId }, isDeleted: { $ne: true } };
+
+    if (chatType === 'group') {
+        const isMember = await Group.exists({ _id: objectChatId, members: objectUserId });
+        if (!isMember) throw new AppError('Access denied to group', 403);
+    }
+
+    const readAt = new Date();
+    const result = await Message.updateMany(
+        { ...query, 'readBy.user': { $ne: objectUserId } },
+        { $push: { readBy: { user: objectUserId, readAt } } }
+    );
+
+    await User.updateOne(
+        { _id: objectUserId, conversationPreferences: { $elemMatch: { chatId: objectChatId, chatType } } },
+        { $set: { 'conversationPreferences.$.markedUnread': false, 'conversationPreferences.$.updatedAt': readAt } }
+    );
+
+    return { readAt, modifiedCount: result.modifiedCount };
+};
+
+const updateConversationPreferences = async (userId, chatType, chatId, changes) => {
+    const allowed = ['isPinned', 'isArchived', 'markedUnread', 'draft'];
+    const updates = Object.fromEntries(Object.entries(changes).filter(([key]) => allowed.includes(key)));
+    if (!Object.keys(updates).length) throw new AppError('No valid preference fields supplied', 400);
+
+    const user = await User.findById(userId);
+    const existing = user.conversationPreferences.find(pref =>
+        String(pref.chatId) === String(chatId) && pref.chatType === chatType
+    );
+
+    if (existing) {
+        Object.assign(existing, updates, { updatedAt: new Date() });
+    } else {
+        user.conversationPreferences.push({ chatId, chatType, ...updates });
+    }
+    await user.save({ validateBeforeSave: true });
+    return user.conversationPreferences.find(pref =>
+        String(pref.chatId) === String(chatId) && pref.chatType === chatType
+    );
 };
 
 const searchMessages = async (userId, query, chatType, chatId, page = 1, limit = 20) => {
@@ -304,6 +412,8 @@ module.exports = {
     getUserChats,
     searchMessages,
     searchMessagesAdvanced,
+    markChatAsRead,
+    updateConversationPreferences,
     compress,
     clearChat
 };

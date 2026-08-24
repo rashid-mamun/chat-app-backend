@@ -28,7 +28,10 @@ const storage = multer.diskStorage({
 const fileFilter = (req, file, cb) => {
     // Keep browser-served uploads to formats with a narrow attack surface.
     const allowedTypes = [
-        'image/jpeg', 'image/png', 'image/gif', 'image/webp', 'application/pdf'
+        'image/jpeg', 'image/png', 'image/gif', 'image/webp',
+        'audio/webm', 'audio/ogg', 'audio/mpeg', 'audio/wav',
+        'video/mp4', 'video/webm',
+        'application/pdf', 'text/plain'
     ];
     
     if (allowedTypes.includes(file.mimetype)) {
@@ -63,6 +66,8 @@ router.post('/', authMiddleware, (req, res) => {
             
             let fileType = 'other';
             if (req.file.mimetype.startsWith('image/')) fileType = 'image';
+            else if (req.file.mimetype.startsWith('audio/')) fileType = 'audio';
+            else if (req.file.mimetype.startsWith('video/')) fileType = 'video';
             else if (req.file.mimetype === 'application/pdf') fileType = 'document';
 
             res.status(200).json({
